@@ -28,7 +28,7 @@ void showInfo();
 bool mouseLeftDown;
 bool mouseRightDown;
 bool mouseMiddleDown;
-float mouseX, mouseY;
+int mouseX, mouseY;
 float cameraAngleX;
 float cameraAngleY;
 float cameraDistance = 0.;
@@ -38,25 +38,60 @@ GLuint programID;
 // ***** CAMERA ***** //
 
 glm::vec3 cameraPosition(0., 0, 3.);
+GLint locCameraPosition;
+
 glm::mat4 MVP;
 glm::mat4 Model, View, Projection;
-
 GLint MatrixIDMVP, MatrixIDView, MatrixIDModel, MatrixIDPerspective;
-GLint locCameraPosition;
 
 // ***** PRIMITIVE ***** //
 
 glm::vec3 primitive[3] = {
-    {0, 0, 0},
-    {1 / 2.0f, 1, 0},
-    {1, 0, 0}
+    {-1, -1, 0},
+    {0, 1, 0},
+    {1, -1, 0}
 };
 
 GLuint indices[3] = {0, 1, 2};
 
 GLuint VBO_primitive, VBO_indices, VAO;
-//Location des VBO
+
 GLuint indexVertex = 0;
+
+// ***** TRANSFORMS ***** //
+std::vector transforms = {
+
+        glm::mat4(0.5, 0, 0, 0,
+                  0, 0.5, 0, -0.5,
+                  0, 0, 1, 0,
+                  0, 0, 0, 1),
+
+        glm::mat4(0.5, 0, 0,-0.5,
+                  0, 0.5, 0,0.5,
+                  0, 0, 1, 0,
+                  0, 0, 0, 1),
+
+        glm::mat4(0.5, 0, 0, 0.5,
+                  0, 0.5, 0, 0.5,
+                  0, 0, 1, 0,
+                  0, 0, 0, 1)
+
+};
+
+GLuint transformsBlockID, drawInfoBlockID;
+
+// ***** Info Dessin ***** //
+struct DrawInfo
+{
+    uint nbIteration;
+    uint maxInstance;
+    uint nbTransformation;
+    uint padding;
+};
+
+DrawInfo drawInfo;
+GLuint uboTranforms, uboInfo;
+
 
 void reshape(GLFWwindow *window, int w, int h) {
     screenHeight = h;
@@ -105,13 +140,13 @@ void mouse(GLFWwindow *window, int button, int action, int mods) {
     }
 }
 
-void mouseMotion(GLFWwindow *window, double x, double y) {
+void mouseMotion(GLFWwindow *window, const double x, const double y) {
     int xPos = static_cast<int>(x);
     int yPos = static_cast<int>(y);
 
     if (mouseLeftDown) {
-        cameraAngleY += (xPos - mouseX);
-        cameraAngleX += (yPos - mouseY);
+        cameraAngleY += static_cast<float>(xPos - mouseX);
+        cameraAngleX += static_cast<float>(yPos - mouseY);
         mouseX = xPos;
         mouseY = yPos;
     }
@@ -123,21 +158,41 @@ void mouseMotion(GLFWwindow *window, double x, double y) {
 
 void initOpenGL() {
     glCullFace(GL_BACK);
-    //glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
 
-    programID = LoadShaders("shaders/PhongShader.vert", "shaders/PhongShader.frag");
+    programID = LoadShaders("shaders/ifs_instanced.vert", "shaders/PhongShader.frag");
 
-    // Get  handles for our matrix transformations "MVP" VIEW  MODELuniform
     MatrixIDMVP = glGetUniformLocation(programID, "MVP");
     MatrixIDView = glGetUniformLocation(programID, "VIEW");
     MatrixIDModel = glGetUniformLocation(programID, "MODEL");
     MatrixIDPerspective = glGetUniformLocation(programID, "PERSPECTIVE");
 
     locCameraPosition = glGetUniformLocation(programID, "cameraPosition");
+
+    // UBO Transforms
+    glGenBuffers(1, &uboTranforms);
+    glBindBuffer(GL_UNIFORM_BUFFER, uboTranforms);
+    glBufferData(GL_UNIFORM_BUFFER, drawInfo.nbTransformation * sizeof(glm::mat4), nullptr, GL_DYNAMIC_DRAW);
+
+    transformsBlockID = glGetUniformBlockIndex(programID, "TransformsBlock");
+
+    glUniformBlockBinding(programID, transformsBlockID, 0);
+
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, uboTranforms);
+
+    // UBO DrawInfo
+
+    glGenBuffers(1, &uboInfo);
+    glBindBuffer(GL_UNIFORM_BUFFER, uboInfo);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(DrawInfo), nullptr, GL_DYNAMIC_DRAW);
+
+    drawInfoBlockID = glGetUniformBlockIndex(programID, "DrawInfoBlock");
+
+    glUniformBlockBinding(programID, drawInfoBlockID, 1);
+
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, uboInfo);
 }
 
-//----------------------------------------
 int main(int argc, char **argv) {
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW!" << std::endl;
@@ -174,9 +229,15 @@ int main(int argc, char **argv) {
     std::cout << "Fabricant : " << glGetString(GL_VENDOR) << std::endl;
     std::cout << "Carte graphique: " << glGetString(GL_RENDERER) << std::endl;
     std::cout << "Version : " << glGetString(GL_VERSION) << std::endl;
-    std::cout << "Version GLSL : " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl << std::endl;
+    std::cout << "Version GLSL : " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
+    GLint maxUBOSize;
+    glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxUBOSize);
+    std::cout << "UBO Max Size : " << maxUBOSize << std::endl << std::endl;
 
     Projection = glm::perspective(glm::radians(60.f), 1.0f, 0.1f, 1000.0f);
+    drawInfo.nbIteration = 1;
+    drawInfo.maxInstance = 3;
+    drawInfo.nbTransformation = transforms.size();
 
     initOpenGL();
 
@@ -201,29 +262,30 @@ int main(int argc, char **argv) {
 }
 
 void genereVBO() {
-    //***************** Partie pour le plan *****************//
 
     glGenVertexArrays(1, &VAO);
     glBindVertexArray(VAO);
 
-    //Location = 0 -> Position
-    glEnableVertexAttribArray(indexVertex); //Location vertex = 0
+    glEnableVertexAttribArray(indexVertex); // Location vertex = 0
     if (glIsBuffer(VBO_primitive) == GL_TRUE)
         glDeleteBuffers(1, &VBO_primitive);
 
     glGenBuffers(1, &VBO_primitive);
     glBindBuffer(GL_ARRAY_BUFFER, VBO_primitive);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(primitive), primitive, GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_primitive);
-
+    glBufferData(GL_ARRAY_BUFFER, sizeof(primitive), primitive, GL_DYNAMIC_DRAW);
     glVertexAttribPointer(indexVertex, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
+    // **Indiquer qu'il s'agit d'un attribut instancié**
+    // L'attribut de position ne change pas entre les instances, donc on utilise glVertexAttribDivisor
+    // Cela dit à OpenGL d'utiliser la même position pour toutes les instances
+    glVertexAttribDivisor(indexVertex, 0);
 
     if (glIsBuffer(VBO_indices) == GL_TRUE)
         glDeleteBuffers(1, &VBO_indices);
+
     glGenBuffers(1, &VBO_indices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, VBO_indices);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_DYNAMIC_DRAW);
 
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -264,18 +326,25 @@ void affichage() {
 void traceObjet() {
 
     glUseProgram(programID);
-    //Update Uniforms
+
+    // Mise à jour des matrices et de la caméra
     glUniformMatrix4fv(MatrixIDMVP, 1, GL_FALSE, &MVP[0][0]);
     glUniformMatrix4fv(MatrixIDView, 1, GL_FALSE, &View[0][0]);
     glUniformMatrix4fv(MatrixIDModel, 1, GL_FALSE, &Model[0][0]);
     glUniformMatrix4fv(MatrixIDPerspective, 1, GL_FALSE, &Projection[0][0]);
-
     glUniform3f(locCameraPosition, cameraPosition.x, cameraPosition.y, cameraPosition.z);
 
-    glViewport(0, 0, screenWidth, screenHeight);
+    // Mettre à jour les données des UBOs après les avoir liés
+    glBindBuffer(GL_UNIFORM_BUFFER, uboTranforms);
+    glBufferData(GL_UNIFORM_BUFFER, drawInfo.nbTransformation * sizeof(glm::mat4), transforms.data(), GL_STATIC_DRAW);
 
-    glBindVertexArray(VAO); //VAO de la primitive
-    glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr);
+    glBindBuffer(GL_UNIFORM_BUFFER, uboInfo);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(DrawInfo), &drawInfo, GL_STATIC_DRAW);
+
+    // Dessiner les objets avec instanciation
+    glViewport(0, 0, screenWidth, screenHeight);
+    glBindVertexArray(VAO);  // VAO de la primitive
+    glDrawElementsInstanced(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr, drawInfo.maxInstance);  // Dessiner avec instanciation
     glBindVertexArray(0);
 
     glUseProgram(0);

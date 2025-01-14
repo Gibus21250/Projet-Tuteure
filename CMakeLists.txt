@@ -10,7 +10,7 @@ add_subdirectory(libs/glfw)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 
-add_executable(IFSOpenGL main.cpp shader.cpp)
+add_executable(IFSOpenGL main.cpp shader.cpp shader.hpp)
 
 
 
