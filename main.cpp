@@ -15,14 +15,11 @@ int screenWidth = 800;
 int screenHeight = 800;
 
 void genereVBO();
-
 void deleteVBO();
-
 void traceObjet();
-
 void affichage();
-
 void showInfo();
+void updateDrawInfo(int nbIteration);
 
 // variables globales pour OpenGL
 bool mouseLeftDown;
@@ -47,9 +44,9 @@ GLint MatrixIDMVP, MatrixIDView, MatrixIDModel, MatrixIDPerspective;
 // ***** PRIMITIVE ***** //
 
 glm::vec3 primitive[3] = {
-    {-1, -1, 0},
-    {0, 1, 0},
-    {1, -1, 0}
+    {0, -1.0, 0},
+    {-1, 1, 0},
+    {1, 1.0, 0}
 };
 
 GLuint indices[3] = {0, 1, 2};
@@ -114,6 +111,15 @@ void clavier(GLFWwindow *window, int key, int scancode, int action, int mods) {
             case GLFW_KEY_V:
                 glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
                 break;
+            case GLFW_KEY_KP_ADD:
+
+                updateDrawInfo(++drawInfo.nbIteration);
+                break;
+            case GLFW_KEY_KP_SUBTRACT:
+                if (drawInfo.nbIteration > 0)
+                    updateDrawInfo(--drawInfo.nbIteration);
+                break;
+
         }
     }
 }
@@ -191,6 +197,18 @@ void initOpenGL() {
     glUniformBlockBinding(programID, drawInfoBlockID, 1);
 
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, uboInfo);
+}
+
+void updateDrawInfo(int nbIteration) {
+    drawInfo.nbIteration = nbIteration;
+
+    size_t nbInstance = 1;
+    for (int i = 0; i < nbIteration; ++i) {
+        nbInstance *= transforms.size();
+    }
+
+    drawInfo.maxInstance = nbInstance;
+
 }
 
 int main(int argc, char **argv) {
