@@ -2,23 +2,36 @@
 
 uniform mat4 MVP;
 
-layout(std140, binding = 0) uniform TransformsBlock {
-    mat4 m[3];
-};
-
-layout(std140, binding = 1) uniform DrawInfoBlock {
+layout(std140, binding = 0) uniform DrawInfoBlock {
     uint nbIteration;
     uint maxInstance;
     uint nbTransformation;
     uint padding;
 };
 
+layout(std140, binding = 1) uniform TransformData {
+    float m[16384];
+};
+
+struct TransformInfo {
+    uint32_t offset; //Offset dans le tableau matrice data
+    uint16_t N;
+    uint16_t M;
+}; // 4 + 2 + 2 bytes
+
+layout(std140, binding = 2) uniform TransformInfos {
+    TransformInfo matricesInfo[numMatrices];
+};
+
 layout (location = 0) in vec3 inPosition;
 
 out vec3 color;
 
+float tampon[1024]; //Tapon servant à stocker les valeurs tamporaire
+
 void main()
 {
+
     float currentValue = float(gl_InstanceID) / float(maxInstance - 1);
     color = vec3(currentValue, 0, 0);
 

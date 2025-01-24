@@ -19,7 +19,7 @@ void deleteVBO();
 void traceObjet();
 void affichage();
 void showInfo();
-void updateDrawInfo(int nbIteration);
+void updateDrawInfo(unsigned nbIteration);
 
 // variables globales pour OpenGL
 bool mouseLeftDown;
@@ -45,8 +45,8 @@ GLint MatrixIDMVP, MatrixIDView, MatrixIDModel, MatrixIDPerspective;
 
 glm::vec3 primitive[3] = {
     {0, -1.0, 0},
-    {-1, 1, 0},
-    {1, 1.0, 0}
+    {-1, 2, 0},
+    {1, 1.5, 0}
 };
 
 GLuint indices[3] = {0, 1, 2};
@@ -89,7 +89,6 @@ struct DrawInfo
 DrawInfo drawInfo;
 GLuint uboTranforms, uboInfo;
 
-
 void reshape(GLFWwindow *window, int w, int h) {
     screenHeight = h;
     screenWidth = w;
@@ -100,6 +99,7 @@ void reshape(GLFWwindow *window, int w, int h) {
 
 void clavier(GLFWwindow *window, int key, int scancode, int action, int mods) {
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+        unsigned iter;
         // Seulement si la touche est pressée ou répétée
         switch (key) {
             case GLFW_KEY_F:
@@ -112,12 +112,13 @@ void clavier(GLFWwindow *window, int key, int scancode, int action, int mods) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
                 break;
             case GLFW_KEY_KP_ADD:
-
-                updateDrawInfo(++drawInfo.nbIteration);
+                iter = drawInfo.nbIteration+1;
+                updateDrawInfo(iter);
                 break;
             case GLFW_KEY_KP_SUBTRACT:
+                iter = drawInfo.nbIteration-1;
                 if (drawInfo.nbIteration > 0)
-                    updateDrawInfo(--drawInfo.nbIteration);
+                    updateDrawInfo(iter);
                 break;
 
         }
@@ -199,16 +200,14 @@ void initOpenGL() {
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, uboInfo);
 }
 
-void updateDrawInfo(int nbIteration) {
+void updateDrawInfo(unsigned nbIteration) {
+
+    if (nbIteration > drawInfo.nbIteration)
+        drawInfo.maxInstance *= drawInfo.nbTransformation;
+    else
+        drawInfo.maxInstance /= drawInfo.nbTransformation;
+
     drawInfo.nbIteration = nbIteration;
-
-    size_t nbInstance = 1;
-    for (int i = 0; i < nbIteration; ++i) {
-        nbInstance *= transforms.size();
-    }
-
-    drawInfo.maxInstance = nbInstance;
-
 }
 
 int main(int argc, char **argv) {
