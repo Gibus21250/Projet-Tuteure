@@ -27,24 +27,33 @@ if (NOT GLEW_FOUND)
     endif()
 endif()
 
+include_directories(
+        libs/glm
+        libs/glfw/include)
+
+if (WIN32)
+    link_libraries(opengl32)
+else ()
+    link_libraries(GL)
+endif()
+
+link_libraries(glfw ${GLEW_LIBRARIES})
+
 
 add_executable(IFSOpenGL main.cpp shader.cpp shader.hpp
-        Automate.cpp
-        Automate.h)
+        Automaton.cpp
+        Automaton.h)
+
+add_executable(test mainTest.cpp shader.cpp shader.hpp
+        Automaton.cpp
+        Automaton.h)
 
 # Copier les shaders
 add_custom_command(TARGET IFSOpenGL POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${SHADER_SOURCE_DIR} ${SHADER_BUILD_DIR}
 )
 
-include_directories(
-        libs/glm
-        libs/glfw/include)
+add_custom_command(TARGET test POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${SHADER_SOURCE_DIR} ${SHADER_BUILD_DIR}
+)
 
-if (WIN32)
-    target_link_libraries(IFSOpenGL PRIVATE opengl32)
-else ()
-    target_link_libraries(IFSOpenGL PRIVATE opengl32)
-endif()
-
-target_link_libraries(IFSOpenGL PRIVATE glfw ${GLEW_LIBRARIES})

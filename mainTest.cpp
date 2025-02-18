@@ -57,39 +57,32 @@ GLuint indexVertex = 0;
 // ***** IFS ***** //
 
 automaton::Automaton automate;
+uint32_t iteration = 0;
 
-std::vector transforms = {
-
-        glm::mat4(0.5, 0, 0, 0,
-                  0, 0.5, 0, 0,
-                  0, 0, 1, 0,
-                  0, 0, 0, 1),
-
-        glm::mat4(0.5, 0, 0,1/4.0,
-                  0, 0.5, 0, 0.5,
-                  0, 0, 1, 0,
-                  0, 0, 0, 1),
-
-        glm::mat4(0.5, -0.5, 0, -.5,
-                  0.5, 0.5, 0, .2,
-                  0, 0, 1, 0,
-                  0, 0, 0, 1)
-
-};
-
-GLuint transformsBlockID, drawInfoBlockID;
+bool CPU = true; //Etat de la génération, CPU ou GPU
 
 // ***** Info Dessin ***** //
-struct DrawInfo
-{
-    unsigned nbIteration;
-    unsigned maxInstance;
-    unsigned nbTransformation;
-    unsigned padding;
-};
 
-DrawInfo drawInfo;
-GLuint uboTranforms, uboInfo;
+GLuint ssboTranforms;
+
+std::vector<glm::mat4> transformations;
+
+void updateSSBOTransform() {
+
+    if (ssboTranforms)
+        glDeleteBuffers(1, &ssboTranforms);
+
+    //Create a new SSBO
+    glGenBuffers(1, &ssboTranforms);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboTranforms);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, transformations.size() * sizeof(glm::mat4), nullptr, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboTranforms); //Index 0
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboTranforms);
+    //Copy data to it
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, transformations.size() * sizeof(glm::mat4), transformations.data());
+
+}
 
 void reshape(GLFWwindow *window, int w, int h) {
     screenHeight = h;
@@ -114,15 +107,18 @@ void clavier(GLFWwindow *window, int key, int scancode, int action, int mods) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
                 break;
             case GLFW_KEY_KP_ADD:
-                iter = drawInfo.nbIteration+1;
-                updateDrawInfo(iter);
-                break;
+                iteration = iteration+1;
+                transformations = automate.compute(iteration);
+                updateSSBOTransform();
+            break;
             case GLFW_KEY_KP_SUBTRACT:
-                iter = drawInfo.nbIteration-1;
-                if (drawInfo.nbIteration > 0)
-                    updateDrawInfo(iter);
-                break;
-
+                iteration = iteration-1;
+                if (iteration > 0)
+                {
+                    transformations = automate.compute(iteration);
+                    updateSSBOTransform();
+                }
+            break;
         }
     }
 }
@@ -169,7 +165,7 @@ void initOpenGL() {
     glCullFace(GL_BACK);
     glEnable(GL_DEPTH_TEST);
 
-    programID = LoadShaders("shaders/ifs_gpu.vert", "shaders/basic.frag");
+    programID = LoadShaders("shaders/ifs_cpu.vert", "shaders/basic.frag");
 
     MatrixIDMVP = glGetUniformLocation(programID, "MVP");
     MatrixIDView = glGetUniformLocation(programID, "VIEW");
@@ -178,38 +174,7 @@ void initOpenGL() {
 
     locCameraPosition = glGetUniformLocation(programID, "cameraPosition");
 
-    // UBO Transforms
-    glGenBuffers(1, &uboTranforms);
-    glBindBuffer(GL_UNIFORM_BUFFER, uboTranforms);
-    glBufferData(GL_UNIFORM_BUFFER, drawInfo.nbTransformation * sizeof(glm::mat4), nullptr, GL_DYNAMIC_DRAW);
-
-    transformsBlockID = glGetUniformBlockIndex(programID, "TransformsBlock");
-
-    glUniformBlockBinding(programID, transformsBlockID, 0);
-
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, uboTranforms);
-
-    // UBO DrawInfo
-
-    glGenBuffers(1, &uboInfo);
-    glBindBuffer(GL_UNIFORM_BUFFER, uboInfo);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(DrawInfo), nullptr, GL_DYNAMIC_DRAW);
-
-    drawInfoBlockID = glGetUniformBlockIndex(programID, "DrawInfoBlock");
-
-    glUniformBlockBinding(programID, drawInfoBlockID, 1);
-
-    glBindBufferBase(GL_UNIFORM_BUFFER, 1, uboInfo);
-}
-
-void updateDrawInfo(unsigned nbIteration) {
-
-    if (nbIteration > drawInfo.nbIteration)
-        drawInfo.maxInstance *= drawInfo.nbTransformation;
-    else
-        drawInfo.maxInstance /= drawInfo.nbTransformation;
-
-    drawInfo.nbIteration = nbIteration;
+    updateSSBOTransform();
 }
 
 int main(int argc, char **argv) {
@@ -254,9 +219,44 @@ int main(int argc, char **argv) {
     std::cout << "UBO Max Size : " << maxUBOSize << std::endl << std::endl;
 
     Projection = glm::perspective(glm::radians(60.f), 1.0f, 0.1f, 1000.0f);
-    drawInfo.nbIteration = 1;
-    drawInfo.maxInstance = 3;
-    drawInfo.nbTransformation = transforms.size();
+
+
+    // Initialize the Automate //
+
+    automaton::State triangle;
+
+    const automaton::Transition T1(
+    glm::mat4(0.5, 0, 0, 0,
+              0, 0.5, 0, 0,
+              0, 0, 1, 0,
+              0, 0, 0, 1),
+              0             //Next state
+        );
+
+    const automaton::Transition T2(
+    glm::mat4(0.5, 0, 0,1/4.0,
+                  0, 0.5, 0, 0.5,
+                  0, 0, 1, 0,
+                  0, 0, 0, 1),
+              0
+        );
+
+    const automaton::Transition T3(
+    glm::mat4(0.5, 0, 0, .5,
+                  0, 0.5, 0, 0,
+                  0, 0, 1, 0,
+                  0, 0, 0, 1),
+              0
+        );
+
+    triangle.addTransition(T1);
+    triangle.addTransition(T2);
+    triangle.addTransition(T3);
+
+    automate.addState(triangle);
+
+
+    transformations = automate.compute(iteration);
 
     initOpenGL();
 
@@ -266,7 +266,6 @@ int main(int argc, char **argv) {
     glfwSetKeyCallback(window, clavier);
     glfwSetMouseButtonCallback(window, mouse);
     glfwSetCursorPosCallback(window, mouseMotion);
-
 
     while (!glfwWindowShouldClose(window)) {
         affichage();
@@ -353,18 +352,13 @@ void traceObjet() {
     glUniformMatrix4fv(MatrixIDPerspective, 1, GL_FALSE, &Projection[0][0]);
     glUniform3f(locCameraPosition, cameraPosition.x, cameraPosition.y, cameraPosition.z);
 
-    // Mettre à jour les données des UBOs après les avoir liés
-    glBindBuffer(GL_UNIFORM_BUFFER, uboTranforms);
-    glBufferData(GL_UNIFORM_BUFFER, drawInfo.nbTransformation * sizeof(glm::mat4), transforms.data(), GL_STATIC_DRAW);
-
-    glBindBuffer(GL_UNIFORM_BUFFER, uboInfo);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(DrawInfo), &drawInfo, GL_STATIC_DRAW);
-
     // Dessiner les objets avec instanciation
     glViewport(0, 0, screenWidth, screenHeight);
     glBindVertexArray(VAO);  // VAO de la primitive
-    glDrawElementsInstanced(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr, drawInfo.maxInstance);  // Dessiner avec instanciation
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboTranforms); // Associer le SSBO au binding 0
+    glDrawElementsInstanced(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr, transformations.size());  // Dessiner avec instanciation
     glBindVertexArray(0);
 
     glUseProgram(0);
 }
+
