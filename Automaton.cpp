@@ -42,11 +42,9 @@ namespace automaton {
         //Transform computed to formated mat4 list
         std::vector<glm::mat4> result(computed.size());
         for (uint32_t i = 0; i < computed.size(); i++)
-            result[i] = computed[i].acc;
+            result[i] = transpose(computed[i].acc);
 
         return result;
     }
-
-
 
 }

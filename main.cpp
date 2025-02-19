@@ -38,7 +38,7 @@ GLint locCameraPosition;
 
 glm::mat4 MVP;
 glm::mat4 Model, View, Projection;
-GLint MatrixIDMVP, MatrixIDView, MatrixIDModel, MatrixIDPerspective;
+GLint uni_MVP, uni_view, uni_model, uni_perspective;
 
 // ***** PRIMITIVE ***** //
 
@@ -171,10 +171,10 @@ void initOpenGL() {
 
     programID = LoadShaders("shaders/ifs_gpu.vert", "shaders/basic.frag");
 
-    MatrixIDMVP = glGetUniformLocation(programID, "MVP");
-    MatrixIDView = glGetUniformLocation(programID, "VIEW");
-    MatrixIDModel = glGetUniformLocation(programID, "MODEL");
-    MatrixIDPerspective = glGetUniformLocation(programID, "PERSPECTIVE");
+    uni_MVP = glGetUniformLocation(programID, "MVP");
+    uni_view = glGetUniformLocation(programID, "VIEW");
+    uni_model = glGetUniformLocation(programID, "MODEL");
+    uni_perspective = glGetUniformLocation(programID, "PERSPECTIVE");
 
     locCameraPosition = glGetUniformLocation(programID, "cameraPosition");
 
@@ -347,10 +347,10 @@ void traceObjet() {
     glUseProgram(programID);
 
     // Mise à jour des matrices et de la caméra
-    glUniformMatrix4fv(MatrixIDMVP, 1, GL_FALSE, &MVP[0][0]);
-    glUniformMatrix4fv(MatrixIDView, 1, GL_FALSE, &View[0][0]);
-    glUniformMatrix4fv(MatrixIDModel, 1, GL_FALSE, &Model[0][0]);
-    glUniformMatrix4fv(MatrixIDPerspective, 1, GL_FALSE, &Projection[0][0]);
+    glUniformMatrix4fv(uni_MVP, 1, GL_FALSE, &MVP[0][0]);
+    glUniformMatrix4fv(uni_view, 1, GL_FALSE, &View[0][0]);
+    glUniformMatrix4fv(uni_model, 1, GL_FALSE, &Model[0][0]);
+    glUniformMatrix4fv(uni_perspective, 1, GL_FALSE, &Projection[0][0]);
     glUniform3f(locCameraPosition, cameraPosition.x, cameraPosition.y, cameraPosition.z);
 
     // Mettre à jour les données des UBOs après les avoir liés

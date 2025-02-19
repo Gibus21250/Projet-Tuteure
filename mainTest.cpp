@@ -6,6 +6,8 @@
 #include "Automaton.h"
 #include "GLFW/glfw3.h"
 #include "shader.hpp"
+
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include "glm.hpp"
 
 #include "gtc/matrix_transform.hpp"
@@ -20,7 +22,7 @@ void affichage();
 void showInfo();
 void updateDrawInfo(unsigned nbIteration);
 
-// variables globales pour OpenGL
+// Global var for control
 bool mouseLeftDown;
 bool mouseRightDown;
 bool mouseMiddleDown;
@@ -38,17 +40,23 @@ GLint locCameraPosition;
 
 glm::mat4 MVP;
 glm::mat4 Model, View, Projection;
-GLint MatrixIDMVP, MatrixIDView, MatrixIDModel, MatrixIDPerspective;
+GLint uni_MVP, uni_view, uni_model, uni_perspective;
 
 // ***** PRIMITIVE ***** //
 
-glm::vec3 primitive[3] = {
+glm::vec3 primitive[4] = {
     {0, 0, 0},
     {.5, 1, 0},
-    {1, 0, 0}
+    {1, 0, 0},
+    {.5, 0, 1}
 };
 
-GLuint indices[3] = {0, 1, 2};
+glm::uvec3 indices[4] = {
+    {0, 1, 2},
+    {1, 3, 2},
+    {0, 3, 1},
+    {0, 2, 3}
+};
 
 GLuint VBO_primitive, VBO_indices, VAO;
 
@@ -58,6 +66,8 @@ GLuint indexVertex = 0;
 
 automaton::Automaton automate;
 uint32_t iteration = 0;
+uint32_t nbInstance = 0;
+GLint uni_nbInstance;
 
 bool CPU = true; //Etat de la génération, CPU ou GPU
 
@@ -75,12 +85,8 @@ void updateSSBOTransform() {
     //Create a new SSBO
     glGenBuffers(1, &ssboTranforms);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboTranforms);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, transformations.size() * sizeof(glm::mat4), nullptr, GL_DYNAMIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboTranforms); //Index 0
-
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboTranforms);
-    //Copy data to it
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, transformations.size() * sizeof(glm::mat4), transformations.data());
+    //Copy data to SSBO
+    glBufferData(GL_SHADER_STORAGE_BUFFER, transformations.size() * sizeof(glm::mat4), transformations.data(), GL_DYNAMIC_DRAW);
 
 }
 
@@ -92,9 +98,9 @@ void reshape(GLFWwindow *window, int w, int h) {
     Projection = glm::perspective(glm::radians(60.0f), (float) w / (float) h, 1.0f, 1000.0f);
 }
 
-void clavier(GLFWwindow *window, int key, int scancode, int action, int mods) {
+void clavier(GLFWwindow *window, int key, int scancode, int action, int mods)        {
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-        unsigned iter;
+
         // Seulement si la touche est pressée ou répétée
         switch (key) {
             case GLFW_KEY_F:
@@ -110,13 +116,15 @@ void clavier(GLFWwindow *window, int key, int scancode, int action, int mods) {
                 iteration = iteration+1;
                 transformations = automate.compute(iteration);
                 updateSSBOTransform();
+                nbInstance = transformations.size();
             break;
             case GLFW_KEY_KP_SUBTRACT:
-                iteration = iteration-1;
                 if (iteration > 0)
                 {
+                    iteration = iteration-1;
                     transformations = automate.compute(iteration);
                     updateSSBOTransform();
+                    nbInstance = transformations.size();
                 }
             break;
         }
@@ -167,12 +175,12 @@ void initOpenGL() {
 
     programID = LoadShaders("shaders/ifs_cpu.vert", "shaders/basic.frag");
 
-    MatrixIDMVP = glGetUniformLocation(programID, "MVP");
-    MatrixIDView = glGetUniformLocation(programID, "VIEW");
-    MatrixIDModel = glGetUniformLocation(programID, "MODEL");
-    MatrixIDPerspective = glGetUniformLocation(programID, "PERSPECTIVE");
+    uni_MVP = glGetUniformLocation(programID, "MVP");
+    uni_view = glGetUniformLocation(programID, "VIEW");
+    uni_model = glGetUniformLocation(programID, "MODEL");
+    uni_perspective = glGetUniformLocation(programID, "PERSPECTIVE");
 
-    locCameraPosition = glGetUniformLocation(programID, "cameraPosition");
+    uni_nbInstance = glGetUniformLocation(programID, "numInstances");
 
     updateSSBOTransform();
 }
@@ -223,6 +231,8 @@ int main(int argc, char **argv) {
 
     // Initialize the Automate //
 
+
+    //Etat triangle
     automaton::State triangle;
 
     const automaton::Transition T1(
@@ -242,11 +252,11 @@ int main(int argc, char **argv) {
         );
 
     const automaton::Transition T3(
-    glm::mat4(0.5, 0, 0, .5,
-                  0, 0.5, 0, 0,
-                  0, 0, 1, 0,
+    glm::mat4(1, 0, 0, 0.5,
+                  0, 1, 0, 0,
+                  0, 0, .7, 0,
                   0, 0, 0, 1),
-              0
+              1
         );
 
     triangle.addTransition(T1);
@@ -255,6 +265,29 @@ int main(int argc, char **argv) {
 
     automate.addState(triangle);
 
+    // state square
+    automaton::State square;
+
+    const automaton::Transition C1(
+    glm::mat4(0.5, 0.2, 0, 0,
+              0, 0.5, 0, 0,
+              0, 0, 1, 0,
+              0, 0, 0, 1),
+              1             //Next state
+        );
+
+    const automaton::Transition C2(
+    glm::mat4(1.1, 0, 0,0,
+                  0.2, 1, 0, 1,
+                  0, .2, 1, 0,
+                  0, 0, 0, 1),
+              1
+        );
+
+    square.addTransition(C1);
+    square.addTransition(C2);
+
+    automate.addState(square);
 
     transformations = automate.compute(iteration);
 
@@ -285,6 +318,7 @@ void genereVBO() {
     glBindVertexArray(VAO);
 
     glEnableVertexAttribArray(indexVertex); // Location vertex = 0
+
     if (glIsBuffer(VBO_primitive) == GL_TRUE)
         glDeleteBuffers(1, &VBO_primitive);
 
@@ -346,17 +380,17 @@ void traceObjet() {
     glUseProgram(programID);
 
     // Mise à jour des matrices et de la caméra
-    glUniformMatrix4fv(MatrixIDMVP, 1, GL_FALSE, &MVP[0][0]);
-    glUniformMatrix4fv(MatrixIDView, 1, GL_FALSE, &View[0][0]);
-    glUniformMatrix4fv(MatrixIDModel, 1, GL_FALSE, &Model[0][0]);
-    glUniformMatrix4fv(MatrixIDPerspective, 1, GL_FALSE, &Projection[0][0]);
-    glUniform3f(locCameraPosition, cameraPosition.x, cameraPosition.y, cameraPosition.z);
+    glUniformMatrix4fv(uni_MVP, 1, GL_FALSE, &MVP[0][0]);
+    glUniformMatrix4fv(uni_view, 1, GL_FALSE, &View[0][0]);
+    glUniformMatrix4fv(uni_model, 1, GL_FALSE, &Model[0][0]);
+    glUniformMatrix4fv(uni_perspective, 1, GL_FALSE, &Projection[0][0]);
+    glUniform1ui(uni_nbInstance, nbInstance);
 
     // Dessiner les objets avec instanciation
     glViewport(0, 0, screenWidth, screenHeight);
     glBindVertexArray(VAO);  // VAO de la primitive
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboTranforms); // Associer le SSBO au binding 0
-    glDrawElementsInstanced(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr, transformations.size());  // Dessiner avec instanciation
+    glDrawElementsInstanced(GL_TRIANGLES, sizeof(indices) / sizeof(glm::vec1), GL_UNSIGNED_INT, nullptr, transformations.size());  // Dessiner avec instanciation
     glBindVertexArray(0);
 
     glUseProgram(0);
