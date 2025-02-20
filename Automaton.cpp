@@ -1,6 +1,9 @@
 #include "Automaton.h"
 
+#include <cmath>
 #include <glm.hpp>
+#include <iostream>
+#include <ostream>
 #include <vector>
 
 namespace automaton {
@@ -29,7 +32,7 @@ namespace automaton {
             for (auto&[stateID, acc] : computed)
             {
                 //For each transfoms for this specific state
-                for (const auto& transition : states[stateID].getTransitions())
+                for (const auto& transition : m_states[stateID].getTransitions())
                 {
                     glm::mat4 new_acc = transition.getTransform() * acc;
                     temp_computed.emplace_back(transition.getNextState(), new_acc);
@@ -45,6 +48,85 @@ namespace automaton {
             result[i] = transpose(computed[i].acc);
 
         return result;
+    }
+    uint32_t Automaton::numberInstances(uint32_t nbIteration) const {
+        uint32_t nbInstances = 0;
+        //Keep traces of number of leaf on each state
+        std::vector<uint32_t> tracesStates(m_states.size(), 0);
+        tracesStates[0] = 1; // We start at the state index 0
+
+        while (nbIteration > 0) {
+
+            std::vector<uint32_t> tracesStatesTmp(m_states.size(), 0);
+
+            //For each leaf count per state
+            for (int i = 0; i < tracesStates.size(); i++)
+            {
+                //Now update leaf count per state
+                for (auto transition : m_states[i].getTransitions())
+                {
+                    tracesStatesTmp[transition.getNextState()] += tracesStates[i];
+                }
+            }
+
+            tracesStates = tracesStatesTmp;
+
+            nbIteration--;
+        }
+
+        for (const unsigned int tracesState : tracesStates) {
+            nbInstances += tracesState;
+        }
+
+        return nbInstances;
+    }
+
+    std::vector<glm::mat4> Automaton::computeTest(uint32_t nbIteration) const {
+
+        uint32_t nbInstances = this->numberInstances(nbIteration);
+
+        std::vector<glm::mat4> result(nbInstances);
+
+        //Compute padding to be in middle of a step
+        float paddind = 1.0f / (2.0f * nbInstances);
+
+        for (int i = 0; i < nbInstances; ++i) {
+
+            float codeAri = static_cast<float>(i) / static_cast<float>(nbInstances) + paddind;
+
+            uint32_t currentState = 0;
+
+            auto res = glm::mat4(1.0f);
+
+            for (int j = 0; j < nbIteration; ++j)
+            {
+                const float stateStep = 1.0f / static_cast<float>(m_states[currentState].getTransitions().size());
+
+                const auto transformIndex = static_cast<uint32_t>(std::floor(codeAri / stateStep));
+                std::cout << " S:" << currentState << "T:" << transformIndex;
+
+                auto &transform = m_states[currentState].getTransitions()[transformIndex];
+
+                res = res * transform.getTransform();
+
+                //Remap the value between 0 and 1 for the next iteration and save next state
+                const float lower = static_cast<float>(transformIndex) * stateStep;
+                const float upper = static_cast<float>(transformIndex + 1) * stateStep;
+                codeAri = (codeAri - lower) / (upper - lower);
+
+                currentState = transform.getNextState();
+            }
+
+            std::cout << "\n";
+
+            result[i] = res;
+
+        }
+
+
+        return result;
+
+
     }
 
 }

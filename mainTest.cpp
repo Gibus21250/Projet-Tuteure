@@ -291,6 +291,10 @@ int main(int argc, char **argv) {
 
     transformations = automate.compute(iteration);
 
+    auto res = automate.computeTest(3);
+
+
+
     initOpenGL();
 
     genereVBO();

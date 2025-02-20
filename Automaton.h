@@ -54,7 +54,7 @@ namespace automaton {
         Automaton() = default;
 
         void addState(const State& state) {
-            this->states.push_back(state);
+            this->m_states.push_back(state);
         }
 
         /**
@@ -64,8 +64,17 @@ namespace automaton {
          */
         std::vector<glm::mat4> compute(uint32_t nbIteration) const;
 
+        /**
+         *
+         * @param nbIteration number of iteration
+         * @return list of all transformations calculated in order by a traversal into to automaton
+         */
+        std::vector<glm::mat4> computeTest(uint32_t nbIteration) const;
+
+        uint32_t numberInstances(uint32_t nbIteration) const;
+
     private:
-        std::vector<State> states;
+        std::vector<State> m_states;
 
     };
 
