@@ -31,7 +31,7 @@ namespace automaton {
             //For each leaf at state stateID and matrix acc
             for (auto&[stateID, acc] : computed)
             {
-                //For each transfoms for this specific state
+                //For each transforms for this specific state
                 for (const auto& transition : m_states[stateID].getTransitions())
                 {
                     glm::mat4 new_acc = transition.getTransform() * acc;
@@ -49,7 +49,9 @@ namespace automaton {
 
         return result;
     }
+
     uint32_t Automaton::numberInstances(uint32_t nbIteration) const {
+
         uint32_t nbInstances = 0;
         //Keep traces of number of leaf on each state
         std::vector<uint32_t> tracesStates(m_states.size(), 0);
@@ -92,7 +94,7 @@ namespace automaton {
 
         for (int i = 0; i < nbInstances; ++i) {
 
-            float codeAri = static_cast<float>(i) / static_cast<float>(nbInstances) + paddind;
+            float codeAri = static_cast<float>(i) / static_cast<float>(nbInstances);
 
             uint32_t currentState = 0;
 
@@ -103,11 +105,11 @@ namespace automaton {
                 const float stateStep = 1.0f / static_cast<float>(m_states[currentState].getTransitions().size());
 
                 const auto transformIndex = static_cast<uint32_t>(std::floor(codeAri / stateStep));
-                std::cout << " S:" << currentState << "T:" << transformIndex;
+                std::cout << " " << currentState << ":" << transformIndex;
 
                 auto &transform = m_states[currentState].getTransitions()[transformIndex];
 
-                res = res * transform.getTransform();
+                res = transform.getTransform() * res;
 
                 //Remap the value between 0 and 1 for the next iteration and save next state
                 const float lower = static_cast<float>(transformIndex) * stateStep;
@@ -119,7 +121,7 @@ namespace automaton {
 
             std::cout << "\n";
 
-            result[i] = res;
+            result[i] = glm::transpose(res);
 
         }
 
@@ -129,4 +131,45 @@ namespace automaton {
 
     }
 
+    std::vector<float> Automaton::getCode(uint32_t nbIteration) const {
+
+        struct state_temp {
+            uint32_t stateID;
+            float code;
+        };
+
+        //List of custom struct to keep traces of the current state
+        std::vector<state_temp> computed;
+        std::vector<state_temp> temp_computed;
+        computed.emplace_back(0, 0); //init ID = 0, 0
+
+        for (uint32_t i = 0; i < nbIteration; i++)
+        {
+            temp_computed.clear();
+            //For each leaf at state stateID and matrix acc
+            for (auto&[stateID, code] : computed)
+            {
+                auto transitions = m_states[stateID].getTransitions();
+
+                float scale = 1 / (i + 1.0f);
+                //For each transforms for this specific state
+                for (int j = 0; j < transitions.size(); j++)
+                {
+                    float new_code = code + static_cast<float>(j) / static_cast<float>(transitions.size()) * scale;
+                    temp_computed.emplace_back(transitions[j].getNextState(), new_code);
+                }
+            }
+            //Heavy copy!
+            computed = temp_computed;
+        }
+
+        //Transform computed to formated mat4 list
+        std::vector<float> result(computed.size());
+
+        for (uint32_t i = 0; i < computed.size(); i++)
+            result[i] = computed[i].code;
+
+        return result;
+
+    }
 }

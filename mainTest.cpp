@@ -248,20 +248,11 @@ int main(int argc, char **argv) {
                   0, 0.5, 0, 0.5,
                   0, 0, 1, 0,
                   0, 0, 0, 1),
-              0
-        );
-
-    const automaton::Transition T3(
-    glm::mat4(1, 0, 0, 0.5,
-                  0, 1, 0, 0,
-                  0, 0, .7, 0,
-                  0, 0, 0, 1),
               1
         );
 
     triangle.addTransition(T1);
     triangle.addTransition(T2);
-    triangle.addTransition(T3);
 
     automate.addState(triangle);
 
@@ -273,10 +264,17 @@ int main(int argc, char **argv) {
               0, 0.5, 0, 0,
               0, 0, 1, 0,
               0, 0, 0, 1),
-              1             //Next state
+              0             //Next state
         );
 
     const automaton::Transition C2(
+    glm::mat4(1.1, 0, 0,0,
+                  0.2, 1, 0, 1,
+                  0, .2, 1, 0,
+                  0, 0, 0, 1),
+              0
+        );
+    const automaton::Transition C3 (
     glm::mat4(1.1, 0, 0,0,
                   0.2, 1, 0, 1,
                   0, .2, 1, 0,
@@ -286,13 +284,26 @@ int main(int argc, char **argv) {
 
     square.addTransition(C1);
     square.addTransition(C2);
+    square.addTransition(C3);
 
     automate.addState(square);
 
     transformations = automate.compute(iteration);
 
-    auto res = automate.computeTest(3);
+    const int nbI = 3;
 
+    auto res = automate.computeTest(nbI);
+
+    auto verite = automate.compute(nbI);
+
+    std::cout << (((res == verite)==true)?"OK":"NOK") << std::endl;
+
+    auto codeTest = automate.getCode(nbI);
+
+    for (int i = 0; i < codeTest.size(); i++) {
+        std::cout << codeTest[i] << " ";
+    }
+    std::cout << std::endl;
 
 
     initOpenGL();

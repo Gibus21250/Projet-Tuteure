@@ -73,6 +73,13 @@ namespace automaton {
 
         uint32_t numberInstances(uint32_t nbIteration) const;
 
+        /**
+         *
+         * @param nbIteration number of iteration
+         * @return list of arithmetic encoded path for each instance
+         */
+        std::vector<float> getCode(uint32_t nbIteration) const;
+
     private:
         std::vector<State> m_states;
 
