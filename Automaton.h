@@ -1,6 +1,6 @@
 #ifndef AUTOMATON_H
 #define AUTOMATON_H
-#include <glm.hpp>
+#include <glm/glm.hpp>
 #include <vector>
 
 namespace automaton {

@@ -8,9 +8,9 @@
 #include "shader.hpp"
 
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#include "glm.hpp"
+#include "glm/glm.hpp"
 
-#include "gtc/matrix_transform.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 
 int screenWidth = 800;
 int screenHeight = 800;
@@ -233,7 +233,7 @@ int main(int argc, char **argv) {
 
 
     //Etat triangle
-    automaton::State triangle;
+    automaton::State C;
 
     const automaton::Transition T1(
     glm::mat4(0.5, 0, 0, 0,
@@ -251,30 +251,30 @@ int main(int argc, char **argv) {
               1
         );
 
-    triangle.addTransition(T1);
-    triangle.addTransition(T2);
+    C.addTransition(T1);
+    C.addTransition(T2);
 
-    automate.addState(triangle);
+    automate.addState(C);
 
     // state square
-    automaton::State square;
+    automaton::State S;
 
-    const automaton::Transition C1(
+    const automaton::Transition S1(
     glm::mat4(0.5, 0.2, 0, 0,
               0, 0.5, 0, 0,
               0, 0, 1, 0,
               0, 0, 0, 1),
-              0             //Next state
+              1             //Next state
         );
 
-    const automaton::Transition C2(
+    const automaton::Transition S2(
     glm::mat4(1.1, 0, 0,0,
                   0.2, 1, 0, 1,
                   0, .2, 1, 0,
                   0, 0, 0, 1),
-              0
+              1
         );
-    const automaton::Transition C3 (
+    const automaton::Transition S3 (
     glm::mat4(1.1, 0, 0,0,
                   0.2, 1, 0, 1,
                   0, .2, 1, 0,
@@ -282,15 +282,15 @@ int main(int argc, char **argv) {
               1
         );
 
-    square.addTransition(C1);
-    square.addTransition(C2);
-    square.addTransition(C3);
+    S.addTransition(S1);
+    S.addTransition(S2);
+    S.addTransition(S3);
 
-    automate.addState(square);
+    automate.addState(S);
 
     transformations = automate.compute(iteration);
 
-    const int nbI = 3;
+    const int nbI = 4;
 
     auto res = automate.computeTest(nbI);
 

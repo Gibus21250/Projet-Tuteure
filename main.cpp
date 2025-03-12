@@ -6,9 +6,9 @@
 #include "Automaton.h"
 #include "GLFW/glfw3.h"
 #include "shader.hpp"
-#include "glm.hpp"
+#include <glm/glm.hpp>
 
-#include "gtc/matrix_transform.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 
 int screenWidth = 800;
 int screenHeight = 800;
