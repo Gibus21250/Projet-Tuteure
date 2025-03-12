@@ -1,1 +1,65 @@
 il faut glew sur la machine
+
+ std::vector<float> Automaton::encode(uint32_t nbIteration) const {
+
+        struct state_temp {
+            uint32_t stateID;
+            float code;
+        };
+
+        //List of custom struct to keep traces of the current state
+        std::vector<state_temp> computed;
+        std::vector<state_temp> temp_computed;
+        computed.emplace_back(0, 0.5f); //init ID = 0, 0.5f for centered encode value
+
+        for (uint32_t i = 0; i < nbIteration; i++)
+        {
+            temp_computed.clear();
+            //For each leaf at state stateID and matrix acc
+            for (auto&[stateID, code] : computed)
+            {
+                auto transitions = m_states[stateID].getTransitions();
+                float sizeInterval = 1.0f / transitions.size();
+                //                                middle        Iterator factor
+                float middle = sizeInterval * (1.0f / 2.0f) * (1.0f / (i + 1.0f));
+
+                uint32_t parity = transitions.size() % 2;
+                int center = transitions.size() / 2; //Is under-rounded if Odd
+
+                if(parity == 0)
+                {
+                    //For each transforms for this specific state
+                    for (int j = 0; j < transitions.size(); j++)
+                    {
+                        if (j == center)
+                            center--;
+
+                        float offset = (float) (j - center) * middle;
+                        float new_code = code + offset;
+                        temp_computed.emplace_back(transitions[j].getNextState(), new_code);
+                    }
+                }
+                else //Odd
+                {
+                    //For each transforms for this specific state
+                    for (int j = 0; j < transitions.size(); j++)
+                    {
+                        float offset = (float) (j - center) * middle;
+                        float new_code = code + 2 * offset;
+                        temp_computed.emplace_back(transitions[j].getNextState(), new_code);
+                    }
+                }
+            }
+            //Heavy copy!
+            computed = temp_computed;
+        }
+
+        //Transform computed to formated mat4 list
+        std::vector<float> result(computed.size());
+
+        for (uint32_t i = 0; i < computed.size(); i++)
+            result[i] = computed[i].code;
+
+        return result;
+
+    }

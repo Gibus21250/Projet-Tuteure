@@ -74,11 +74,19 @@ namespace automaton {
         uint32_t numberInstances(uint32_t nbIteration) const;
 
         /**
-         *
-         * @param nbIteration number of iteration
-         * @return list of arithmetic encoded path for each instance
+         * Compute and return all arithmetic encode branch based on the automaton.
+         * @param nbIteration
+         * @return all arithmetic encoded values between 0 and 1
          */
-        std::vector<float> getCode(uint32_t nbIteration) const;
+        std::vector<float> encode(uint32_t nbIteration) const;
+
+        /**
+         * Compute and return all matrices decoded
+         * @param nbIteration Number of iteration
+         * @param encodedValues vector of all encoded values
+         * @return vector of glm::mat4 matrices
+         */
+        std::vector<glm::mat4> decode(uint32_t nbIteration, const std::vector<float>& encodedValues) const;
 
     private:
         std::vector<State> m_states;

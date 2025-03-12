@@ -232,7 +232,7 @@ int main(int argc, char **argv) {
     // Initialize the Automate //
 
 
-    //Etat triangle
+    //state square
     automaton::State C;
 
     const automaton::Transition T1(
@@ -248,7 +248,7 @@ int main(int argc, char **argv) {
                   0, 0.5, 0, 0.5,
                   0, 0, 1, 0,
                   0, 0, 0, 1),
-              1
+              0
         );
 
     C.addTransition(T1);
@@ -256,7 +256,7 @@ int main(int argc, char **argv) {
 
     automate.addState(C);
 
-    // state square
+    // state "Sierpiński"
     automaton::State S;
 
     const automaton::Transition S1(
@@ -286,25 +286,25 @@ int main(int argc, char **argv) {
     S.addTransition(S2);
     S.addTransition(S3);
 
-    automate.addState(S);
+    //automate.addState(S);
 
     transformations = automate.compute(iteration);
 
     const int nbI = 4;
 
-    auto res = automate.computeTest(nbI);
+    auto encodedValues = automate.encode(nbI);
 
-    auto verite = automate.compute(nbI);
-
-    std::cout << (((res == verite)==true)?"OK":"NOK") << std::endl;
-
-    auto codeTest = automate.getCode(nbI);
-
-    for (int i = 0; i < codeTest.size(); i++) {
-        std::cout << codeTest[i] << " ";
+    for (int i = 0; i < encodedValues.size(); i++) {
+        std::cout << encodedValues[i] << " ";
     }
     std::cout << std::endl;
 
+
+    auto decodedMatrices = automate.decode(nbI, encodedValues);
+
+    auto verite = automate.compute(nbI);
+
+    std::cout << (((decodedMatrices == verite)==true)?"OK":"NOK") << std::endl;
 
     initOpenGL();
 

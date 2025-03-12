@@ -52,7 +52,6 @@ namespace automaton {
 
     uint32_t Automaton::numberInstances(uint32_t nbIteration) const {
 
-        uint32_t nbInstances = 0;
         //Keep traces of number of leaf on each state
         std::vector<uint32_t> tracesStates(m_states.size(), 0);
         tracesStates[0] = 1; // We start at the state index 0
@@ -76,6 +75,8 @@ namespace automaton {
             nbIteration--;
         }
 
+        uint32_t nbInstances = 0;
+
         for (const unsigned int tracesState : tracesStates) {
             nbInstances += tracesState;
         }
@@ -84,8 +85,7 @@ namespace automaton {
     }
 
     std::vector<glm::mat4> Automaton::computeTest(uint32_t nbIteration) const {
-        //Adapt for centered encoded tree
-        auto encodedTree = this->getCode(nbIteration);
+        auto encodedTree = this->encode(nbIteration);
         uint32_t nbInstances = encodedTree.size();
 
         std::vector<glm::mat4> result(nbInstances);
@@ -122,66 +122,54 @@ namespace automaton {
 
         }
 
-
         return result;
-
-
     }
 
-    /**
-     * Compute and return all arithmetic encode branch based on the automaton.
-     * @param nbIteration
-     * @return all arithmetic encoded values.
-     */
-    std::vector<float> Automaton::getCode(uint32_t nbIteration) const {
+    std::vector<float> Automaton::encode(uint32_t nbIteration) const {
 
         struct state_temp {
-            uint32_t stateID;
+            uint32_t currentState;
+            uint32_t prevState;
             float code;
         };
 
         //List of custom struct to keep traces of the current state
         std::vector<state_temp> computed;
         std::vector<state_temp> temp_computed;
-        computed.emplace_back(0, 0.5f); //init ID = 0, 0.5f for centered encode value
+        computed.emplace_back(0, 0, 0.5); //init ID = 0, 0.0f for centered encode value
 
         for (uint32_t i = 0; i < nbIteration; i++)
         {
+
             temp_computed.clear();
             //For each leaf at state stateID and matrix acc
-            for (auto&[stateID, code] : computed)
+            for (auto&[currentState, previousState, code] : computed)
             {
-                auto transitions = m_states[stateID].getTransitions();
-                float sizeInterval = 1.0f / transitions.size();
-                //                                middle        Iterator factor
-                float middle = sizeInterval * (1.0f / 2.0f) * (1.0f / (i + 1.0f));
+                auto previousTrans = m_states[previousState].getTransitions();
+                auto currentTrans = m_states[currentState].getTransitions();
 
-                uint32_t parity = transitions.size() % 2;
-                int center = transitions.size() / 2; //Is under-rounded if Odd
+                float amplitude;
 
-                if(parity == 0)
+                if (i == 0)
                 {
-                    //For each transforms for this specific state
-                    for (int j = 0; j < transitions.size(); j++)
-                    {
-                        if (j == center)
-                            center--;
-
-                        float offset = (float) (j - center) * middle;
-                        float new_code = code + offset;
-                        temp_computed.emplace_back(transitions[j].getNextState(), new_code);
-                    }
+                    amplitude = 1.0f;
                 }
-                else //Odd
+                else
                 {
-                    //For each transforms for this specific state
-                    for (int j = 0; j < transitions.size(); j++)
-                    {
-                        float offset = (float) (j - center) * middle;
-                        float new_code = code + offset;
-                        temp_computed.emplace_back(transitions[j].getNextState(), new_code);
-                    }
+                    amplitude = (1.0f / previousTrans.size()) / i;
                 }
+
+                float step = amplitude / currentTrans.size();
+                float center = step / 2.0f;
+
+
+                //For each transforms for this specific state
+                for (int j = 0; j < currentTrans.size(); j++)
+                {
+                    float new_code = code - amplitude / 2.0f + j * step + center;
+                    temp_computed.emplace_back(currentTrans[j].getNextState(), currentState, new_code);
+                }
+
             }
             //Heavy copy!
             computed = temp_computed;
@@ -195,5 +183,36 @@ namespace automaton {
 
         return result;
 
+    }
+
+    std::vector<glm::mat4> Automaton::decode(uint32_t nbIteration, const std::vector<float>& encodedValues) const {
+
+        auto result = std::vector<glm::mat4>(encodedValues.size());
+
+        for (uint32_t i = 0; i < encodedValues.size(); i++) {
+
+            glm::mat4 acc(1.0f); // Eye matrix
+            float code = encodedValues[i];
+            uint32_t currentState = 0; //Start state 0
+            for (uint32_t j = 0; j < nbIteration; j++) {
+
+                const float stateStep = 1.0f / static_cast<float>(m_states[currentState].getTransitions().size());
+                const auto transformIndex = static_cast<uint32_t>(std::floor(code / stateStep));
+
+                acc = m_states[currentState].getTransitions()[transformIndex].getTransform() * acc;
+                currentState = m_states[currentState].getTransitions()[transformIndex].getNextState();
+
+                //Rescale encoded value for the next decoding iteration
+                const float lower = static_cast<float>(transformIndex) * stateStep;
+                const float upper = static_cast<float>(transformIndex + 1) * stateStep;
+                code = (code - lower) / (upper - lower);
+
+            }
+
+            result[i] = glm::transpose(acc);
+
+        }
+
+        return result;
     }
 }

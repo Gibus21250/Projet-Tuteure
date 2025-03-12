@@ -10,7 +10,6 @@ set(CUSTOM_GLEW_PATH "J:/Developpement/SDK/glew-2.2.0")
 option(CUSTOM_GLEW_PATH "Chemin vers les bibliothèques GLEW personnalisées" "")
 
 add_subdirectory(libs/glfw)
-add_subdirectory(libs/glm)
 
 find_package(OpenGL REQUIRED)
 find_package(GLEW QUIET)
