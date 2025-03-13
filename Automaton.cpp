@@ -156,7 +156,7 @@ namespace automaton {
                 }
                 else
                 {
-                    amplitude = (1.0f / previousTrans.size()) / i;
+                    amplitude = pow(1.0f / previousTrans.size(), i);
                 }
 
                 float step = amplitude / currentTrans.size();
@@ -167,6 +167,7 @@ namespace automaton {
                 for (int j = 0; j < currentTrans.size(); j++)
                 {
                     float new_code = code - amplitude / 2.0f + j * step + center;
+
                     temp_computed.emplace_back(currentTrans[j].getNextState(), currentState, new_code);
                 }
 

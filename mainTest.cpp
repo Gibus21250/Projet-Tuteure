@@ -290,7 +290,7 @@ int main(int argc, char **argv) {
 
     transformations = automate.compute(iteration);
 
-    const int nbI = 4;
+    const int nbI = 20;
 
     auto encodedValues = automate.encode(nbI);
 
