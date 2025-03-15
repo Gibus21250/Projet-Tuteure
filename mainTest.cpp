@@ -248,7 +248,7 @@ int main(int argc, char **argv) {
                   0, 0.5, 0, 0.5,
                   0, 0, 1, 0,
                   0, 0, 0, 1),
-              0
+              1
         );
 
     C.addTransition(T1);
@@ -286,11 +286,11 @@ int main(int argc, char **argv) {
     S.addTransition(S2);
     S.addTransition(S3);
 
-    //automate.addState(S);
+    automate.addState(S);
 
     transformations = automate.compute(iteration);
 
-    const int nbI = 20;
+    const int nbI = 10;
 
     auto encodedValues = automate.encode(nbI);
 

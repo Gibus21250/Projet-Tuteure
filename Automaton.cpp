@@ -129,46 +129,34 @@ namespace automaton {
 
         struct state_temp {
             uint32_t currentState;
-            uint32_t prevState;
+            float amplitude;
             float code;
         };
 
         //List of custom struct to keep traces of the current state
         std::vector<state_temp> computed;
         std::vector<state_temp> temp_computed;
-        computed.emplace_back(0, 0, 0.5); //init ID = 0, 0.0f for centered encode value
+        computed.emplace_back(0, 1.0, 0.5); //init ID = 0, 0.0f for centered encode value
 
         for (uint32_t i = 0; i < nbIteration; i++)
         {
 
             temp_computed.clear();
             //For each leaf at state stateID and matrix acc
-            for (auto&[currentState, previousState, code] : computed)
+            for (auto&[currentState, amplitude, code] : computed)
             {
-                auto previousTrans = m_states[previousState].getTransitions();
                 auto currentTrans = m_states[currentState].getTransitions();
-
-                float amplitude;
-
-                if (i == 0)
-                {
-                    amplitude = 1.0f;
-                }
-                else
-                {
-                    amplitude = pow(1.0f / previousTrans.size(), i);
-                }
 
                 float step = amplitude / currentTrans.size();
                 float center = step / 2.0f;
+                float lower = (code - amplitude / 2.0f);
 
 
                 //For each transforms for this specific state
                 for (int j = 0; j < currentTrans.size(); j++)
                 {
-                    float new_code = code - amplitude / 2.0f + j * step + center;
-
-                    temp_computed.emplace_back(currentTrans[j].getNextState(), currentState, new_code);
+                    float new_code = lower + j * step + center;
+                    temp_computed.emplace_back(currentTrans[j].getNextState(), step, new_code);
                 }
 
             }
