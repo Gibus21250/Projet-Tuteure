@@ -1,43 +1,59 @@
 #version 450
 
 uniform mat4 MVP;
+uniform uint nbIteration;
 
-layout(std140, binding = 0) uniform TransformsBlock {
-    mat4 m[3];
+struct StateData {
+    uint nbTransform;       //Number of transform
+    uint padding;           //Number of tranform to jump above for the tranform array
 };
 
-layout(std140, binding = 1) uniform DrawInfoBlock {
-    uint nbIteration;
-    uint maxInstance;
-    uint nbTransformation;
-    uint padding;
+//Buffer containing states informations, and a special padding value to jump to state's tranforms info
+layout(std430, binding = 0) restrict readonly buffer StateInfo {
+    StateData states[];
+} stateInfo;
+
+struct TransformData {
+    mat4 mat;
+    uint nextState;
 };
+
+//Buffer containing all matrices and the next state
+layout(std430, binding = 1) restrict readonly buffer TransformInfo {
+    TransformData transforms[];
+} transformInfo;
+
+//Buffer of all encode path
+layout(std430, binding = 2) restrict readonly buffer CodeInfo {
+    float code[];
+} codeInfo;
 
 layout (location = 0) in vec3 inPosition;
-
 out vec3 color;
 
 void main()
 {
-    float currentValue = float(gl_InstanceID) / float(maxInstance - 1);
-    color = vec3(currentValue, 0, 0);
+    float code = codeInfo.code[gl_InstanceID];
+    color = vec3(code, 0, 0);
 
-    float f_nbTransform = float(nbTransformation);
-    float segmentSize = float(1.0f) / f_nbTransform;
+    mat4 model = mat4(1); // Eye
+    uint currentState = 0; //Start state 0
 
-    mat4 model = mat4(1);
+    for (uint j = 0; j < nbIteration; j++) {
 
-    for (int i = 0; i < nbIteration; i++)
-    {
-        //Get the indice of the transfom to apply
-        float f_no = floor(currentValue * f_nbTransform);
-        uint no = min(uint(f_no), nbTransformation - 1);
+        const float stateStep = 1.0f / float(stateInfo.states[currentState].nbTransform);
+        const uint transformIndex = uint(floor(code / stateStep));
 
-        model = model * transpose(m[no]);
+        //Accumulate transforms
+        model = transformInfo.transforms[stateInfo.states[currentState].padding + transformIndex].mat * model;
+        //Get next state
+        currentState = transformInfo.transforms[stateInfo.states[currentState].padding + transformIndex].nextState;
 
-        //Remap the value between 0 and 1 for the next iteration
-        float lower = float(no) * segmentSize;
-        currentValue = (currentValue - lower) / segmentSize;
+        //Rescale encoded value for the next decoding iteration
+        const float lower = float(transformIndex) * stateStep;
+        const float upper = float(transformIndex + 1) * stateStep;
+        code = (code - lower) / (upper - lower);
+
     }
 
     gl_Position = MVP * model * vec4(inPosition, 1.0);
