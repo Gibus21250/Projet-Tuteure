@@ -84,47 +84,6 @@ namespace automaton {
         return nbInstances;
     }
 
-    std::vector<glm::mat4> Automaton::computeTest(uint32_t nbIteration) const {
-        auto encodedTree = this->encode(nbIteration);
-        uint32_t nbInstances = encodedTree.size();
-
-        std::vector<glm::mat4> result(nbInstances);
-
-        for (int i = 0; i < nbInstances; ++i) {
-
-            float codeAri = encodedTree[i];
-
-            uint32_t currentState = 0;
-            auto res = glm::mat4(1.0f);
-
-            for (int j = 0; j < nbIteration; ++j)
-            {
-                const float stateStep = 1.0f / static_cast<float>(m_states[currentState].getTransitions().size());
-
-                const auto transformIndex = static_cast<uint32_t>(std::floor(codeAri / stateStep));
-                std::cout << " " << currentState << ":" << transformIndex;
-
-                auto &transform = m_states[currentState].getTransitions()[transformIndex];
-
-                res = transform.getTransform() * res;
-
-                //Remap the value between 0 and 1 for the next iteration and save next state
-                const float lower = static_cast<float>(transformIndex) * stateStep;
-                const float upper = static_cast<float>(transformIndex + 1) * stateStep;
-                codeAri = (codeAri - lower) / (upper - lower);
-
-                currentState = transform.getNextState();
-            }
-
-            std::cout << "\n";
-
-            result[i] = glm::transpose(res);
-
-        }
-
-        return result;
-    }
-
     std::vector<float> Automaton::encode(uint32_t nbIteration) const {
 
         struct state_temp {
@@ -164,7 +123,7 @@ namespace automaton {
             computed = temp_computed;
         }
 
-        //Transform computed to formated mat4 list
+        //Gather code for each leaf
         std::vector<float> result(computed.size());
 
         for (uint32_t i = 0; i < computed.size(); i++)

@@ -53,23 +53,12 @@ namespace automaton {
 
         Automaton() = default;
 
-        void addState(const State& state) {
-            this->m_states.push_back(state);
-        }
-
         /**
-         *
+         * Compute and return all transforms for each leaf
          * @param nbIteration number of iteration
          * @return list of all transformations calculated in order by a traversal into to automaton
          */
         std::vector<glm::mat4> compute(uint32_t nbIteration) const;
-
-        /**
-         *
-         * @param nbIteration number of iteration
-         * @return list of all transformations calculated in order by a traversal into to automaton
-         */
-        std::vector<glm::mat4> computeTest(uint32_t nbIteration) const;
 
         uint32_t numberInstances(uint32_t nbIteration) const;
 
@@ -87,6 +76,14 @@ namespace automaton {
          * @return vector of glm::mat4 matrices
          */
         std::vector<glm::mat4> decode(uint32_t nbIteration, const std::vector<float>& encodedValues) const;
+
+        //***** GETTER & SETTER ***** //
+
+        void addState(const State& state) {
+            this->m_states.push_back(state);
+        }
+
+        std::vector<State>& getStates() { return m_states; }
 
     private:
         std::vector<State> m_states;
