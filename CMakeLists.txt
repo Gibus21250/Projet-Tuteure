@@ -38,12 +38,7 @@ endif()
 
 link_libraries(glfw ${GLEW_LIBRARIES})
 
-
 add_executable(IFSOpenGL main.cpp shader.cpp shader.hpp
-        Automaton.cpp
-        Automaton.h)
-
-add_executable(test mainTest.cpp shader.cpp shader.hpp
         Automaton.cpp
         Automaton.h)
 
@@ -51,8 +46,3 @@ add_executable(test mainTest.cpp shader.cpp shader.hpp
 add_custom_command(TARGET IFSOpenGL POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${SHADER_SOURCE_DIR} ${SHADER_BUILD_DIR}
 )
-
-add_custom_command(TARGET test POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${SHADER_SOURCE_DIR} ${SHADER_BUILD_DIR}
-)
-
