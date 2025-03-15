@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
 
 #define M_PIl          3.141592653589793238462643383279502884L
 
@@ -58,7 +59,7 @@ GLuint indexVertex = 0;
 // ***** IFS ***** //
 
 GLint uni_nbIter;
-uint32_t nbIteration = 0;
+uint32_t nbIteration = 18;
 uint32_t nbInstance = 1;
 
 automaton::Automaton automate;
@@ -214,7 +215,11 @@ int main(int argc, char **argv) {
     std::cout << "Version GLSL : " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     GLint maxUBOSize;
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxUBOSize);
-    std::cout << "UBO Max Size : " << maxUBOSize << std::endl << std::endl;
+    std::cout << "UBO Max Size : " << maxUBOSize << " octets " << std::endl;
+    GLint maxSSBOSize;
+    glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &maxSSBOSize);
+
+    std::cout << "SSBO Max Size: " << maxSSBOSize << " octets" << std::endl << std::endl;
 
     Projection = glm::perspective(glm::radians(60.f), 1.0f, 0.1f, 1000.0f);
 
@@ -372,7 +377,27 @@ void generateGPUData()
 void updateAutomate()
 {
     codes.clear();
+
+    auto start = std::chrono::high_resolution_clock::now();
+
     codes = automate.encode(nbIteration);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> duration = end - start;
+    std::cout << "Time Encode: " << duration.count() * 1000 << " ms" << std::endl;
+
+
+    start = std::chrono::high_resolution_clock::now();
+
+    auto codes2 = automate.encode2(nbIteration);
+    end = std::chrono::high_resolution_clock::now();
+
+
+    duration = end - start;
+    std::cout << "Time Encode2: " << duration.count() * 1000 << " ms" << std::endl;
+
+
+    std::cout << (codes==codes2) << "\n";
     nbInstance = codes.size();
 
     generateGPUData();

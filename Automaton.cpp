@@ -84,6 +84,80 @@ namespace automaton {
         return nbInstances;
     }
 
+    std::vector<float> Automaton::encode2(uint32_t nbIteration) const {
+
+        struct state_temp {
+            uint32_t currentState;
+            float amplitude;
+            float code;
+        };
+
+        auto nbInstance = numberInstances(nbIteration);
+
+        //Array of custom struct to keep traces of the current state
+        //Preallocated to improve efficiency
+        auto ping = new state_temp[nbInstance];
+        auto pong = new state_temp[nbInstance];
+
+        auto computed = ping;
+        auto temp_computed = pong;
+
+        ping[0] = {0, 1.0, 0.5}; //init ID = 0, 0.0f for centered encode value
+
+        uint32_t nbPing = 1;
+        uint32_t nbPong = 0;
+
+        for (uint32_t i = 0; i < nbIteration; i++)
+        {
+
+            //Ping pong generator (try to avoid heavy copy, see encode)
+            //2 buffers with the same size
+
+            computed = (i%2)?pong:ping;
+            temp_computed = (i%2)?ping:pong;
+
+            auto& counterComputed = (i%2)?nbPong:nbPing;
+            auto& counterNext = (i%2)?nbPing:nbPong;
+
+            counterNext = 0;
+
+            //For each leaf already computed
+            for(int j = 0; j < counterComputed; j++)
+            {
+                state_temp& sTmp = computed[j];
+
+                auto& currentTrans = m_states[sTmp.currentState].getTransitions();
+
+                float step = sTmp.amplitude / currentTrans.size();
+                float center = step / 2.0f;
+                float lower = (sTmp.code - sTmp.amplitude / 2.0f);
+
+
+                //For each transforms for this specific state
+                for (int k = 0; k < currentTrans.size(); k++)
+                {
+                    float new_code = lower + k * step + center;
+                    temp_computed[counterNext] = {currentTrans[k].getNextState(), step, new_code};
+                    counterNext++;
+                }
+
+            }
+        }
+
+        computed = (nbIteration%2)?pong:ping;
+
+        //Gather code for each leaf
+        std::vector<float> result(nbInstance);
+
+        for (uint32_t i = 0; i < nbInstance; i++)
+            result[i] = computed[i].code;
+
+        delete[] ping;
+        delete[] pong;
+
+        return result;
+    }
+
     std::vector<float> Automaton::encode(uint32_t nbIteration) const {
 
         struct state_temp {
@@ -104,7 +178,7 @@ namespace automaton {
             //For each leaf at state stateID and matrix acc
             for (auto&[currentState, amplitude, code] : computed)
             {
-                auto currentTrans = m_states[currentState].getTransitions();
+                auto& currentTrans = m_states[currentState].getTransitions();
 
                 float step = amplitude / currentTrans.size();
                 float center = step / 2.0f;

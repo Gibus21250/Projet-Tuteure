@@ -62,6 +62,8 @@ namespace automaton {
 
         uint32_t numberInstances(uint32_t nbIteration) const;
 
+        std::vector<float> Automaton::encode2(uint32_t nbIteration) const;
+
         /**
          * Compute and return all arithmetic encode branch based on the automaton.
          * @param nbIteration
