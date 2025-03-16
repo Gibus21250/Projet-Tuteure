@@ -31,7 +31,7 @@ namespace automaton {
             //For each leaf at state stateID and matrix acc
             for (auto&[stateID, acc] : computed)
             {
-                //For each transforms for this specific state
+                //For each transitions for this specific state
                 for (const auto& transition : m_states[stateID].getTransitions())
                 {
                     glm::mat4 new_acc = transition.getTransform() * acc;
@@ -133,7 +133,7 @@ namespace automaton {
                 float lower = (sTmp.code - sTmp.amplitude / 2.0f);
 
 
-                //For each transforms for this specific state
+                //For each transitions for this specific state
                 for (int k = 0; k < currentTrans.size(); k++)
                 {
                     float new_code = lower + k * step + center;
@@ -185,7 +185,7 @@ namespace automaton {
                 float lower = (code - amplitude / 2.0f);
 
 
-                //For each transforms for this specific state
+                //For each transitions for this specific state
                 for (int j = 0; j < currentTrans.size(); j++)
                 {
                     float new_code = lower + j * step + center;

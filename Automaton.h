@@ -54,7 +54,7 @@ namespace automaton {
         Automaton() = default;
 
         /**
-         * Compute and return all transforms for each leaf
+         * Compute and return all transitions for each leaf
          * @param nbIteration number of iteration
          * @return list of all transformations calculated in order by a traversal into to automaton
          */
@@ -62,7 +62,13 @@ namespace automaton {
 
         uint32_t numberInstances(uint32_t nbIteration) const;
 
-        std::vector<float> Automaton::encode2(uint32_t nbIteration) const;
+        /**
+         * Compute and return all arithmetic encode branch based on the automaton.
+         * Improved version of encode.
+         * @param nbIteration
+         * @return all arithmetic encoded values between 0 and 1
+         */
+        std::vector<float> encode2(uint32_t nbIteration) const;
 
         /**
          * Compute and return all arithmetic encode branch based on the automaton.
