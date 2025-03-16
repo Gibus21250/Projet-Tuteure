@@ -1,7 +1,11 @@
 #version 450
 
-uniform mat4 MVP;
 uniform uint nbIteration;
+uniform uint nbInstances;
+
+layout(std430, binding = 0) restrict writeonly buffer Decoded {
+    mat4 matrices[];
+} decoded;
 
 struct StateData {
     uint nbTransform;       //Number of transform
@@ -9,7 +13,7 @@ struct StateData {
 };
 
 //Buffer containing states informations, and a special padding value to jump to state's tranforms info
-layout(std430, binding = 0) restrict readonly buffer StateInfo {
+layout(std430, binding = 1) restrict readonly buffer StateInfo {
     StateData states[];
 } stateInfo;
 
@@ -19,24 +23,27 @@ struct TransitionData {
 };
 
 //Buffer containing all matrices and the next state
-layout(std430, binding = 1) restrict readonly buffer TransitionInfo {
+layout(std430, binding = 2) restrict readonly buffer TransitionInfo {
     TransitionData transitions[];
 } transitionInfo;
 
 //Buffer of all encode path
-layout(std430, binding = 2) restrict readonly buffer CodeInfo {
+layout(std430, binding = 3) restrict readonly buffer CodeInfo {
     float code[];
 } codeInfo;
 
-layout (location = 0) in vec3 inPosition;
-out vec3 color;
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+void main() {
 
-void main()
-{
-    float code = codeInfo.code[gl_InstanceID];
-    color = vec3(code, 0, 0);
+    uint globalID = gl_GlobalInvocationID.x;
 
-    mat4 model = mat4(1); // Eye
+    if (globalID >= nbInstances) {
+        return;
+    }
+
+    float code = codeInfo.code[globalID];
+
+    mat4 model = mat4(1.0f); // Eye
     uint currentState = 0; //Start state 0
 
     for (uint j = 0; j < nbIteration; j++) {
@@ -56,6 +63,7 @@ void main()
 
     }
 
-    gl_Position = MVP * model * vec4(inPosition, 1.0);
+    decoded.matrices[globalID] = model;
+
 
 }

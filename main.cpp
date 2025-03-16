@@ -1,7 +1,7 @@
 #include <iostream>
 #include <cstdio>
-#include <cstring>
 #include <GL/glew.h>
+#include <fstream>
 
 #include "Automaton.h"
 #include "GLFW/glfw3.h"
@@ -31,7 +31,7 @@ float cameraAngleX = 0;
 float cameraAngleY = 0;
 float cameraDistance = 0.;
 
-GLuint programID;
+GLuint renderProgram;
 
 // ***** CAMERA ***** //
 
@@ -58,34 +58,49 @@ GLuint indexVertex = 0;
 
 // ***** IFS ***** //
 
+GLuint computeProgram;
+
 GLint uni_nbIter;
-uint32_t nbIteration = 18;
+uint32_t nbIteration = 0;
 uint32_t nbInstance = 1;
 
 automaton::Automaton automate;
 
 // ***** Info GPU ***** //
 
-GLuint ssbo_state, ssbo_transform, ssbo_code;
+GLuint ssbo_state, ssbo_transition, ssbo_code;
+GLuint ssbo_transform;
+GLint uni_compNbInstance, uni_compNbIteration;
 
 struct StateData {
     uint32_t nbTransform;
     uint32_t padding;
 };
 
-struct TransformData {
+struct TransitionData {
     glm::mat4 mat;
     alignas(16) uint32_t nextState;
 };
 
 //Data GPU formated
 std::vector<StateData> states;
-std::vector<TransformData> transforms;
+std::vector<TransitionData> transitions;
 std::vector<float> codes;
 
-void updateAutomate();
-void generateGPUData();
-void updateSSBO();
+/*
+ * Send a formated automate to the GPU
+ */
+void sendAutomatonGPU();
+
+/*
+ * Encode each path, and send it to the GPU.
+ */
+void encodeAutomaton();
+
+/*
+ * Decode the automaton it to the GPU.
+ */
+void decodeAutomaton();
 
 void reshape(GLFWwindow *window, int w, int h) {
     screenHeight = h;
@@ -109,17 +124,30 @@ void clavier(GLFWwindow *window, int key, int scancode, int action, int mods) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
                 break;
             case GLFW_KEY_KP_ADD:
+            case GLFW_KEY_P:
                 nbIteration = nbIteration+1;
-                updateAutomate();
+                {
+                    std::string title = "Automaton - Iterations: " + std::to_string(nbIteration);
+                    glfwSetWindowTitle(window, title.c_str());
+                }
+                encodeAutomaton();
+                decodeAutomaton();
                 break;
             case GLFW_KEY_KP_SUBTRACT:
+            case GLFW_KEY_M:
                 if(nbIteration > 0)
                 {
                     nbIteration = nbIteration-1;
-                    updateAutomate();
+                    encodeAutomaton();
+                    decodeAutomaton();
+                    {
+                        std::string title = "Automaton - Iterations: " + std::to_string(nbIteration);
+                        glfwSetWindowTitle(window, title.c_str());
+                    }
                 }
                 break;
-
+            default:
+                break;
         }
     }
 }
@@ -166,13 +194,60 @@ void initOpenGL() {
     glCullFace(GL_BACK);
     glEnable(GL_DEPTH_TEST);
 
-    programID = LoadShaders("shaders/ifs_gpu.vert", "shaders/basic.frag");
+    renderProgram = LoadShaders("../shaders/basic.vert", "../shaders/basic.frag");
 
-    uni_MVP = glGetUniformLocation(programID, "MVP");
-    uni_view = glGetUniformLocation(programID, "VIEW");
-    uni_model = glGetUniformLocation(programID, "MODEL");
-    uni_perspective = glGetUniformLocation(programID, "PERSPECTIVE");
-    uni_nbIter = glGetUniformLocation(programID, "nbIteration");
+    uni_MVP = glGetUniformLocation(renderProgram, "MVP");
+    uni_view = glGetUniformLocation(renderProgram, "VIEW");
+    uni_model = glGetUniformLocation(renderProgram, "MODEL");
+    uni_perspective = glGetUniformLocation(renderProgram, "PERSPECTIVE");
+    uni_nbIter = glGetUniformLocation(renderProgram, "nbIteration");
+
+
+    //Loading compute shader
+    std::ifstream file("../shaders/decode-ifs.comp", std::ios::in);
+    if (!file.is_open()) {
+        std::cerr << "Erreur : Impossible d'ouvrir le fichier " << "shaders/decode-ifs.comp" << std::endl;
+        exit(0);
+    }
+
+    std::string shaderCode;
+    std::string line;
+    while (getline(file, line)) {
+        shaderCode += line + "\n";
+    }
+
+    file.close();
+
+    GLuint computeShader = glCreateShader(GL_COMPUTE_SHADER);
+    const char* shaderSource = shaderCode.c_str();
+    glShaderSource(computeShader, 1, &shaderSource, nullptr);
+    glCompileShader(computeShader);
+
+    GLint success;
+    glGetShaderiv(computeShader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetShaderInfoLog(computeShader, 512, nullptr, infoLog);
+        std::cerr << "Erreur de compilation du Compute Shader:\n" << infoLog << std::endl;
+        exit(0);
+    }
+
+    computeProgram = glCreateProgram();
+    glAttachShader(computeProgram, computeShader);
+    glLinkProgram(computeProgram);
+
+    glGetProgramiv(computeProgram, GL_LINK_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetProgramInfoLog(computeProgram, 512, nullptr, infoLog);
+        std::cerr << "Erreur de linkage du programme:\n" << infoLog << std::endl;
+        exit(0);
+    }
+
+    glDeleteShader(computeShader);
+
+    uni_compNbIteration = glGetUniformLocation(computeProgram, "nbIteration");
+    uni_compNbInstance = glGetUniformLocation(computeProgram, "nbInstances");
 
 }
 
@@ -187,8 +262,10 @@ int main(int argc, char **argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // Profil core (sans fonctions obsolètes)
 
-    // Création de la fenêtre
-    GLFWwindow *window = glfwCreateWindow(screenWidth, screenHeight, "Ombrage", nullptr, nullptr);
+
+    std::string title = "Automaton - Iterations: " + std::to_string(nbIteration);
+
+    GLFWwindow *window = glfwCreateWindow(screenWidth, screenHeight, title.c_str(), nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window!" << std::endl;
         glfwTerminate();
@@ -230,30 +307,30 @@ int main(int argc, char **argv) {
 
     const automaton::Transition S1(
             glm::mat4(0.5, 0, 0, 0,
-                              0, 0.5, 0, 0,
-                              0, 0, 1, 0,
-                              0, 0, 0, 1),
+                      0, 0.5, 0, 0,
+                      0, 0, 1, 0,
+                      0, 0, 0, 1),
             0             //Next state
     );
 
     const automaton::Transition S2(
-            glm::mat4(0.5, 0, 0,0,
-                              0, 0.5, 0, 0,
-                              0, 0, 1, 0,
-                              1.0/4, 0.5, 0, 1),
+            glm::mat4(0.5, 0, 0, 0,
+                      0, 0.5, 0, 0,
+                      0, 0, 1, 0,
+                      1.0 / 4, 0.5, 0, 1),
             0
     );
 
     const automaton::Transition S3(
-            glm::mat4(0.5, 0, 0,0.0,
-                              0, 0.5, 0, 0.0,
-                              0, 0, 1, 0,
-                              .5, 0, 0, 1),
+            glm::mat4(0.5, 0, 0, 0.0,
+                      0, 0.5, 0, 0.0,
+                      0, 0, 1, 0,
+                      .5, 0, 0, 1),
             0
     );
 
     const automaton::Transition S4(
-            glm::mat4(1, 0, 0,0.0,
+            glm::mat4(1, 0, 0, 0.0,
                       0, 1, 0, 0.0,
                       0, 0, 1, 0,
                       1, 0, 0, 1),
@@ -272,7 +349,7 @@ int main(int argc, char **argv) {
     glm::mat4 tmp(1, 0, 0, 0,
                   0, 1, 0, 0,
                   0, -.2, 1, 0,
-                  1.0/4, 0.5, -.8, 1);
+                  1.0 / 4, 0.5, -.8, 1);
 
     const automaton::Transition C1(
             glm::rotate(tmp, float(M_PIl) / 8.0f, glm::vec3(0, 1.0f, 0)),
@@ -280,9 +357,9 @@ int main(int argc, char **argv) {
     );
 
     tmp = (1, 0, 0, 0,
-                        0, 1, 0, 0,
-                        0, -.2, 1, 0,
-                        1.0/4, 0.5, .8, 1);
+            0, 1, 0, 0,
+            0, -.2, 1, 0,
+            1.0 / 4, 0.5, .8, 1);
 
     const automaton::Transition C2(
             glm::rotate(tmp, float(M_PIl) / 8.0f, glm::vec3(0, 1.0f, 0)),
@@ -294,13 +371,17 @@ int main(int argc, char **argv) {
 
     automate.addState(C);
 
+
     //---------End init Automaton---------//
 
     initOpenGL();
 
     genereVBO();
 
-    updateAutomate();
+    //Init automaton on the GPU
+    sendAutomatonGPU();
+    encodeAutomaton();
+    decodeAutomaton();
 
     glfwSetFramebufferSizeCallback(window, reshape);
     glfwSetKeyCallback(window, clavier);
@@ -309,13 +390,13 @@ int main(int argc, char **argv) {
 
 
     while (!glfwWindowShouldClose(window)) {
-        affichage();
         glfwPollEvents();
+        affichage();
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    glDeleteProgram(programID);
+    glDeleteProgram(renderProgram);
     deleteVBO();
     return 0;
 }
@@ -350,11 +431,12 @@ void genereVBO() {
     glBindVertexArray(0);
 }
 
-void generateGPUData()
+void sendAutomatonGPU()
 {
     states.clear();
-    transforms.clear();
+    transitions.clear();
 
+    // ******* Update Structures for the GPU ******* //
     uint32_t currentPadding = 0;
 
     auto automateStates = automate.getStates();
@@ -366,74 +448,109 @@ void generateGPUData()
 
         for(int j = 0; j < stateTransition.size(); j++)
         {
-            transforms.emplace_back(stateTransition[j].getTransform(), stateTransition[j].getNextState());
+            transitions.emplace_back(stateTransition[j].getTransform(), stateTransition[j].getNextState());
         }
 
         currentPadding += stateTransition.size();
 
     }
-}
 
-void updateAutomate()
-{
-    codes.clear();
+    // ******* Send Data to the GPU ******* //
 
-    auto start = std::chrono::high_resolution_clock::now();
-
-    codes = automate.encode(nbIteration);
-    auto end = std::chrono::high_resolution_clock::now();
-
-    std::chrono::duration<double> duration = end - start;
-    std::cout << "Time Encode: " << duration.count() * 1000 << " ms" << std::endl;
-
-
-    start = std::chrono::high_resolution_clock::now();
-
-    auto codes2 = automate.encode2(nbIteration);
-    end = std::chrono::high_resolution_clock::now();
-
-
-    duration = end - start;
-    std::cout << "Time Encode2: " << duration.count() * 1000 << " ms" << std::endl;
-
-
-    std::cout << (codes==codes2) << "\n";
-    nbInstance = codes.size();
-
-    generateGPUData();
-    updateSSBO();
-}
-
-void updateSSBO() {
-
-    // SSBO StateInfo (binding = 0)
+    // SSBO StateInfo (binding = 1)
     if(glIsBuffer(ssbo_state))
         glDeleteBuffers(1, &ssbo_state);
 
+    size_t stateInfoSize = sizeof(StateData) * states.size();
+
     glGenBuffers(1, &ssbo_state);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_state);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(StateData) * states.size(), states.data(), GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo_state);  // Binding = 0
+    glBufferData(GL_SHADER_STORAGE_BUFFER, stateInfoSize, states.data(), GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo_state);  // Binding = 1
 
-    // SSBO TransformInfo (binding = 1)
-    glGenBuffers(1, &ssbo_transform);
-    if(glIsBuffer(ssbo_transform))
-        glDeleteBuffers(1, &ssbo_transform);
+    std::cout << "SSBO StateInfo (binding = 1) - Size: " << stateInfoSize << " bytes." << std::endl;
 
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_transform);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(TransformData) * transforms.size(), transforms.data(), GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo_transform);  // Binding = 1
+    // SSBO TransitionInfo (binding = 2)
+    if(glIsBuffer(ssbo_transition))
+        glDeleteBuffers(1, &ssbo_transition);
 
-    // SSBO CodeInfo (binding = 2)
-    glGenBuffers(1, &ssbo_code);
+    size_t transitionInfoSize = sizeof(TransitionData) * transitions.size();
+
+    glGenBuffers(1, &ssbo_transition);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_transition);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, transitionInfoSize, transitions.data(), GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo_transition);  // Binding = 2
+
+
+    std::cout << "SSBO TransitionInfo (binding = 2) - Size: " << transitionInfoSize << " bytes." << std::endl;
+
+}
+
+void encodeAutomaton()
+{
+    //Add logic if uniform automaton, no need to encode CPU side
+    codes = automate.encode2(nbIteration);
+
+    nbInstance = codes.size();
+
+    // SSBO CodeInfo (binding = 3)
     if(glIsBuffer(ssbo_code))
         glDeleteBuffers(1, &ssbo_code);
 
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_code);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * codes.size(), codes.data(), GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo_code);  // Binding = 2
+    size_t codeInfoSize = sizeof(float) * codes.size();
 
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+    glGenBuffers(1, &ssbo_code);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_code);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, codeInfoSize, codes.data(), GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo_code);  // Binding = 3
+
+    std::cout << "SSBO CodeInfo (binding = 3) - Size: " << codeInfoSize << " bytes." << std::endl;
+
+}
+
+void decodeAutomaton(){
+
+    // SSBO transitions (binding = 0)
+    if(glIsBuffer(ssbo_transform))
+        glDeleteBuffers(1, &ssbo_transform);
+
+    size_t transformsSize = sizeof(glm::mat4) * codes.size();
+
+    glGenBuffers(1, &ssbo_transform);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_transform);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, transformsSize, 0, GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo_transform);  // Binding = 0
+
+    std::cout << "SSBO Transforms (binding = 0) - Size: " << transformsSize << " bytes." << std::endl;
+
+
+    //Now dispatch the decoder shader
+    GLuint query;
+    glGenQueries(1, &query);
+
+
+    glUseProgram(computeProgram);
+    glUniform1ui(uni_compNbIteration, nbIteration);
+    glUniform1ui(uni_compNbInstance, nbInstance);
+
+    glBeginQuery(GL_TIME_ELAPSED, query);
+    glDispatchCompute((nbInstance + 63) / 64, 1, 1);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    glFlush();
+    glEndQuery(GL_TIME_ELAPSED);
+    glUseProgram(0);
+
+    GLuint64 elapsedTime = 0;
+    do {
+        glGetQueryObjectui64v(query, GL_QUERY_RESULT_AVAILABLE, &elapsedTime);
+    } while (!elapsedTime);
+
+    glGetQueryObjectui64v(query, GL_QUERY_RESULT, &elapsedTime);
+
+    std::cout << "Decoding shader execution time: " << elapsedTime / 1e6 << " ms" << std::endl;
+
+    glDeleteQueries(1, &query);
+
 }
 
 void deleteVBO() {
@@ -448,7 +565,6 @@ void affichage() {
     glClearColor(.8, .8, 1.0, 0.0);
     glClearDepth(10); // 0 is near, >0 is far
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glPointSize(2.0);
 
     Model = glm::mat4(1.0f);
     Model = translate(Model, glm::vec3(0, 0, cameraDistance));
@@ -469,7 +585,7 @@ void affichage() {
 
 void traceObjet() {
 
-    glUseProgram(programID);
+    glUseProgram(renderProgram);
 
     // Mise à jour des matrices et de la caméra
     glUniformMatrix4fv(uni_MVP, 1, GL_FALSE, &MVP[0][0]);
@@ -478,12 +594,10 @@ void traceObjet() {
     glUniformMatrix4fv(uni_perspective, 1, GL_FALSE, &Projection[0][0]);
     glUniform1ui(uni_nbIter, nbIteration);
 
-    //Bind les SSBO
-
     // Dessiner les objets avec instanciation
     glViewport(0, 0, screenWidth, screenHeight);
     glBindVertexArray(VAO);  // VAO de la primitive
-    glDrawElementsInstanced(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr, nbInstance);  // Dessiner avec instanciation
+    glDrawElementsInstanced(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr, nbInstance);
     glBindVertexArray(0);
 
     glUseProgram(0);
