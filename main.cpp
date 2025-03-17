@@ -75,11 +75,17 @@ GLint uni_compNbInstance, uni_compNbIteration;
 struct StateData {
     uint32_t nbTransform;
     uint32_t padding;
+
+    StateData(uint32_t nb, uint32_t& pad)
+            : nbTransform(nb), padding(pad) {}
 };
 
 struct TransitionData {
     glm::mat4 mat;
     alignas(16) uint32_t nextState;
+
+    TransitionData(const glm::mat4& m, uint32_t next)
+            : mat(m), nextState(next) {}
 };
 
 //Data GPU formated

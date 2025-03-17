@@ -18,6 +18,9 @@ namespace automaton {
         struct state_temp {
             uint32_t stateID;
             glm::mat4 acc;
+
+            state_temp(uint32_t id, const glm::mat4& m)
+                    : stateID(id), acc(m) {}
         };
 
         //List of custom struct to keep traces of the current state
@@ -164,6 +167,9 @@ namespace automaton {
             uint32_t currentState;
             float amplitude;
             float code;
+
+            state_temp(uint32_t id, float a, float c)
+                    : currentState(id), amplitude(a), code(c) {}
         };
 
         //List of custom struct to keep traces of the current state
