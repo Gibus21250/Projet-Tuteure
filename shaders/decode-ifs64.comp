@@ -1,0 +1,69 @@
+#version 450
+
+uniform uint nbIteration;
+uniform uint nbInstances;
+
+layout(std430, binding = 0) restrict writeonly buffer Decoded {
+    mat4 matrices[];
+} decoded;
+
+struct StateData {
+    uint nbTransform;       //Number of transform
+    uint padding;           //Number of tranform to jump above for the tranform array
+};
+
+//Buffer containing states informations, and a special padding value to jump to state's tranforms info
+layout(std430, binding = 1) restrict readonly buffer StateInfo {
+    StateData states[];
+} stateInfo;
+
+struct TransitionData {
+    mat4 mat;
+    uint nextState;
+};
+
+//Buffer containing all matrices and the next state
+layout(std430, binding = 2) restrict readonly buffer TransitionInfo {
+    TransitionData transitions[];
+} transitionInfo;
+
+//Buffer of all encode path
+layout(std430, binding = 3) restrict readonly buffer CodeInfo {
+    double code[];
+} codeInfo;
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+void main() {
+
+    uint globalID = gl_GlobalInvocationID.x;
+
+    if (globalID >= nbInstances) {
+        return;
+    }
+
+    double code = codeInfo.code[globalID];
+
+    mat4 model = mat4(1.0f); // Eye
+    uint currentState = 0; //Start state 0
+
+    for (uint j = 0; j < nbIteration; j++) {
+
+        const double stateStep = 1.0f / double(stateInfo.states[currentState].nbTransform);
+        const uint transformIndex = uint(floor(code / stateStep));
+
+        //Accumulate transforms
+        model = transitionInfo.transitions[stateInfo.states[currentState].padding + transformIndex].mat * model;
+        //Get next state
+        currentState = transitionInfo.transitions[stateInfo.states[currentState].padding + transformIndex].nextState;
+
+        //Rescale encoded value for the next decoding iteration
+        const double lower = double(transformIndex) * stateStep;
+        const double upper = double(transformIndex + 1) * stateStep;
+        code = (code - lower) / (upper - lower);
+
+    }
+
+    decoded.matrices[globalID] = model;
+
+
+}
