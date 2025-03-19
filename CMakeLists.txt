@@ -44,6 +44,20 @@ add_executable(IFSOpenGL main.cpp
         Automaton.cpp
         Automaton.h)
 
+add_executable(test
+        test.cpp
+        Automaton.cpp
+        Automaton.h
+)
+
+add_executable(testgpu
+        testgpu.cpp
+        shader.cpp
+        shader.hpp
+        Automaton.cpp
+        Automaton.h
+)
+
 # Copier les shaders
 #add_custom_command(TARGET IFSOpenGL POST_BUILD
 #        COMMAND ${CMAKE_COMMAND} -E copy_directory ${SHADER_SOURCE_DIR} ${SHADER_BUILD_DIR}

@@ -1,65 +1,69 @@
-il faut glew sur la machine
+void generateGPUData()
+{
+    states.clear();
+    transitions.clear();
 
- std::vector<float> Automaton::encode(uint32_t nbIteration) const {
+    uint32_t currentPadding = 0;
 
-        struct state_temp {
-            uint32_t stateID;
-            float code;
-        };
+    auto automateStates = automate.getStates();
 
-        //List of custom struct to keep traces of the current state
-        std::vector<state_temp> computed;
-        std::vector<state_temp> temp_computed;
-        computed.emplace_back(0, 0.5f); //init ID = 0, 0.5f for centered encode value
+    for(int i = 0; i < automateStates.size(); i++)
+    {
+        states.emplace_back(automateStates[i].getNumberTransform(), currentPadding);
+        auto stateTransition = automateStates[i].getTransitions();
 
-        for (uint32_t i = 0; i < nbIteration; i++)
+        for(int j = 0; j < stateTransition.size(); j++)
         {
-            temp_computed.clear();
-            //For each leaf at state stateID and matrix acc
-            for (auto&[stateID, code] : computed)
-            {
-                auto transitions = m_states[stateID].getTransitions();
-                float sizeInterval = 1.0f / transitions.size();
-                //                                middle        Iterator factor
-                float middle = sizeInterval * (1.0f / 2.0f) * (1.0f / (i + 1.0f));
-
-                uint32_t parity = transitions.size() % 2;
-                int center = transitions.size() / 2; //Is under-rounded if Odd
-
-                if(parity == 0)
-                {
-                    //For each transforms for this specific state
-                    for (int j = 0; j < transitions.size(); j++)
-                    {
-                        if (j == center)
-                            center--;
-
-                        float offset = (float) (j - center) * middle;
-                        float new_code = code + offset;
-                        temp_computed.emplace_back(transitions[j].getNextState(), new_code);
-                    }
-                }
-                else //Odd
-                {
-                    //For each transforms for this specific state
-                    for (int j = 0; j < transitions.size(); j++)
-                    {
-                        float offset = (float) (j - center) * middle;
-                        float new_code = code + 2 * offset;
-                        temp_computed.emplace_back(transitions[j].getNextState(), new_code);
-                    }
-                }
-            }
-            //Heavy copy!
-            computed = temp_computed;
+            transitions.emplace_back(stateTransition[j].getTransform(), stateTransition[j].getNextState());
         }
 
-        //Transform computed to formated mat4 list
-        std::vector<float> result(computed.size());
-
-        for (uint32_t i = 0; i < computed.size(); i++)
-            result[i] = computed[i].code;
-
-        return result;
+        currentPadding += stateTransition.size();
 
     }
+}
+
+void sendAutomatonGPU()
+{
+    codes.clear();
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    codes = automate.encode2(nbIteration);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> duration = end - start;
+    std::cout << "Time Encode: " << duration.count() * 1000 << " ms" << std::endl;
+
+    nbInstance = codes.size();
+
+    generateGPUData();
+    updateSSBO();
+
+    GLuint query;
+    glGenQueries(1, &query);
+
+
+    //Now dispatch the decoder shader
+    glUseProgram(computeProgram);
+    glUniform1ui(uni_compNbIteration, nbIteration);
+    glUniform1ui(uni_compNbInstance, nbInstance);
+
+    glBeginQuery(GL_TIME_ELAPSED, query);
+    glDispatchCompute((nbInstance + 31) / 32, 1, 1);
+
+    glEndQuery(GL_TIME_ELAPSED);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    glUseProgram(0);
+
+    GLuint64 elapsedTime = 0;
+    do {
+        glGetQueryObjectui64v(query, GL_QUERY_RESULT_AVAILABLE, &elapsedTime);
+    } while (!elapsedTime);
+
+    glGetQueryObjectui64v(query, GL_QUERY_RESULT, &elapsedTime);
+
+    std::cout << "Compute shader execution time: " << elapsedTime / 1e6 << " ms" << std::endl;
+
+    glDeleteQueries(1, &query);
+
+}
