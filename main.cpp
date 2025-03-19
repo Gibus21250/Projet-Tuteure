@@ -61,7 +61,7 @@ GLuint indexVertex = 0;
 GLuint computeProgram;
 
 GLint uni_nbIter;
-uint32_t nbIteration = 0;
+uint32_t nbIteration = 15;
 uint32_t nbInstance = 1;
 
 automaton::Automaton automate;
@@ -257,7 +257,8 @@ void initOpenGL() {
 
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW!" << std::endl;
         return -1;
@@ -495,9 +496,15 @@ void sendAutomatonGPU()
 void encodeAutomaton()
 {
     //Add logic if uniform automaton, no need to encode CPU side
-    codes = automate.encode2(nbIteration);
+
+    auto start = std::chrono::high_resolution_clock::now();
+    codes = automate.encode2<float>(nbIteration);
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> duration = end - start;
+    std::cout << "Encoding execution timme : " << duration.count() << " ms." << std::endl;
 
     nbInstance = codes.size();
+
 
     // SSBO CodeInfo (binding = 3)
     if(glIsBuffer(ssbo_code))
