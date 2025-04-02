@@ -51,10 +51,13 @@ void main() {
         const double stateStep = 1.0f / double(stateInfo.states[currentState].nbTransform);
         const uint transformIndex = uint(floor(code / stateStep));
 
+        StateData sInfo = stateInfo.states[currentState];
+        TransitionData tInfo = transitionInfo.transitions[sInfo.padding + transformIndex];
+
         //Accumulate transforms
-        model = transitionInfo.transitions[stateInfo.states[currentState].padding + transformIndex].mat * model;
+        model = tInfo.mat * model;
         //Get next state
-        currentState = transitionInfo.transitions[stateInfo.states[currentState].padding + transformIndex].nextState;
+        currentState = tInfo.nextState;
 
         //Rescale encoded value for the next decoding iteration
         const double lower = double(transformIndex) * stateStep;

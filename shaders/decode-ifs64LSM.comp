@@ -29,8 +29,14 @@ layout(std430, binding = 2) restrict readonly buffer TransitionInfo {
 
 //Buffer of all encode path
 layout(std430, binding = 3) restrict readonly buffer CodeInfo {
-    float code[];
+    double code[];
 } codeInfo;
+
+#define nb_states 2
+#define nb_transition 6
+
+shared StateData lsm_states[nb_states];
+shared TransitionData lsm_transitions[nb_transition];
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 void main() {
@@ -41,7 +47,18 @@ void main() {
         return;
     }
 
-    float code = codeInfo.code[globalID];
+    //Fetch automaton to the LSM (Local Shared Memory) to reduce latency (20% faster)
+    if(gl_LocalInvocationID.x < nb_states) {
+        lsm_states[gl_LocalInvocationID.x] = stateInfo.states[gl_LocalInvocationID.x];
+    }
+
+    if(gl_LocalInvocationID.x < nb_transition) {
+        lsm_transitions[gl_LocalInvocationID.x] = transitionInfo.transitions[gl_LocalInvocationID.x];
+    }
+
+    barrier();
+
+    double code = codeInfo.code[globalID];
 
     mat4 model = mat4(1.0f); // Eye
     uint currentState = 0; //Start state 0
@@ -51,8 +68,9 @@ void main() {
         const float stateStep = 1.0f / float(stateInfo.states[currentState].nbTransform);
         const uint transformIndex = uint(floor(code / stateStep));
 
-        StateData sInfo = stateInfo.states[currentState];
-        TransitionData tInfo = transitionInfo.transitions[sInfo.padding + transformIndex];
+        //Copy
+        StateData sInfo = lsm_states[currentState];
+        TransitionData tInfo = lsm_transitions[sInfo.padding + transformIndex];
 
         //Accumulate transforms
         model = tInfo.mat * model;

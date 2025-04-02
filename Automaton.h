@@ -1,5 +1,6 @@
 #ifndef AUTOMATON_H
 #define AUTOMATON_H
+#include <thread>
 #include <glm/glm.hpp>
 #include <vector>
 
@@ -54,7 +55,7 @@ namespace automaton {
         Automaton() = default;
 
         /**
-         * Compute and return all matrices for the automate (transposed for the GPU)
+         * Compute and return all matrices for the automaton (transposed for the GPU)
          * @param nbIteration number of iteration
          * @return list of all transformations calculated in order by a traversal into to automaton
          */
@@ -236,6 +237,64 @@ namespace automaton {
 
                 result[i] = glm::transpose(acc);
 
+            }
+
+            return result;
+        }
+
+        template <typename T>
+        static void decodeSegment(const std::vector<T>& encodedValues, uint32_t nbIteration,
+            const std::vector<State>& m_states, std::vector<glm::mat4>& result,size_t start, size_t end) {
+
+            for (size_t i = start; i < end; i++) {
+                glm::mat4 acc(1.0f); // Eye matrix
+                T code = encodedValues[i];
+                uint32_t currentState = 0; // Start state 0
+
+                for (uint32_t j = 0; j < nbIteration; j++) {
+                    const T stateStep = 1.0f / static_cast<T>(m_states[currentState].getTransitions().size());
+                    const auto transformIndex = static_cast<uint32_t>(std::floor(code / stateStep));
+
+                    acc = m_states[currentState].getTransitions()[transformIndex].getTransform() * acc;
+                    currentState = m_states[currentState].getTransitions()[transformIndex].getNextState();
+
+                    // Rescale encoded value for the next decoding iteration
+                    const T lower = static_cast<T>(transformIndex) * stateStep;
+                    const T upper = static_cast<T>(transformIndex + 1) * stateStep;
+                    code = (code - lower) / (upper - lower);
+                }
+
+                result[i] = glm::transpose(acc);
+            }
+        }
+
+        /**
+         * Compute and return all matrices decoded (MultiThreaded Version)
+         * @tparam T Type of encoded format (float-double)
+         * @param nbIteration NUmber of iteration
+         * @param encodedValues Vector of all encoded values
+         * @param numberThread Number of thread to launch for decoding
+         * @return vector of glm::mat4 matrices
+         */
+        template <typename T>
+        std::vector<glm::mat4> decodeMT(uint32_t nbIteration, const std::vector<T>& encodedValues, const uint32_t numberThread) const
+        {
+            auto result = std::vector<glm::mat4>(encodedValues.size());
+            std::vector<std::thread> threads;
+            const size_t totalSize = encodedValues.size();
+            const size_t chunkSize = (totalSize + numberThread - 1) / numberThread;
+
+            for (uint32_t t = 0; t < numberThread; t++) {
+                size_t start = t * chunkSize;
+                size_t end = std::min(start + chunkSize, totalSize);
+                if (start < end) {
+                    threads.emplace_back(decodeSegment<T>, std::cref(encodedValues), nbIteration,
+                                         std::cref(m_states), std::ref(result), start, end);
+                }
+            }
+
+            for (auto& thread : threads) {
+                thread.join();
             }
 
             return result;

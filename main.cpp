@@ -91,7 +91,7 @@ struct TransitionData {
 //Data GPU formated
 std::vector<StateData> states;
 std::vector<TransitionData> transitions;
-std::vector<float> codes;
+std::vector<double> codes;
 
 /*
  * Send a formated automate to the GPU
@@ -104,7 +104,7 @@ void sendAutomatonGPU();
 void encodeAutomaton();
 
 /*
- * Decode the automaton it to the GPU.
+ * Decode the automaton on the GPU and save result in a GPU's buffer.
  */
 void decodeAutomaton();
 
@@ -210,7 +210,7 @@ void initOpenGL() {
 
 
     //Loading compute shader
-    std::ifstream file("../shaders/decode-ifs.comp", std::ios::in);
+    std::ifstream file("../shaders/decode-ifsLSM.comp", std::ios::in);
     if (!file.is_open()) {
         std::cerr << "Erreur : Impossible d'ouvrir le fichier " << "shaders/decode-ifs.comp" << std::endl;
         exit(0);
@@ -302,8 +302,11 @@ int main(int argc, char **argv)
     std::cout << "UBO Max Size : " << maxUBOSize << " octets " << std::endl;
     GLint maxSSBOSize;
     glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &maxSSBOSize);
+    std::cout << "SSBO Max Size: " << maxSSBOSize << " octets" << std::endl;
+    GLint maxSharedMemory;
+    glGetIntegerv(GL_MAX_COMPUTE_SHARED_MEMORY_SIZE, &maxSharedMemory);
+    std::cout << "LSM max: " << maxSharedMemory << " bytes" << std::endl << std::endl;
 
-    std::cout << "SSBO Max Size: " << maxSSBOSize << " octets" << std::endl << std::endl;
 
     Projection = glm::perspective(glm::radians(60.f), 1.0f, 0.1f, 1000.0f);
 
@@ -359,7 +362,7 @@ int main(int argc, char **argv)
                   1.0 / 4, 0.5, -.8, 1);
 
     const automaton::Transition C1(
-            glm::rotate(tmp, float(M_PIl) / 8.0f, glm::vec3(0, 1.0f, 0)),
+            glm::rotate(tmp, static_cast<float>(M_PI) / 8.0f, glm::vec3(0, 1.0f, 0)),
             1
     );
 
@@ -369,7 +372,7 @@ int main(int argc, char **argv)
             1.0 / 4, 0.5, .8, 1);
 
     const automaton::Transition C2(
-            glm::rotate(tmp, float(M_PIl) / 8.0f, glm::vec3(0, 1.0f, 0)),
+            glm::rotate(tmp, static_cast<float>(M_PIl) / 8.0f, glm::vec3(0, 1.0f, 0)),
             1
     );
 
@@ -398,10 +401,12 @@ int main(int argc, char **argv)
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        decodeAutomaton();
         affichage();
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+
 
     glDeleteProgram(renderProgram);
     deleteVBO();
@@ -498,7 +503,7 @@ void encodeAutomaton()
     //Add logic if uniform automaton, no need to encode CPU side
 
     auto start = std::chrono::high_resolution_clock::now();
-    codes = automate.encode2<float>(nbIteration);
+    codes = automate.encode2<double>(nbIteration);
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
     std::cout << "Encoding execution timme : " << duration.count() << " ms." << std::endl;
@@ -510,7 +515,7 @@ void encodeAutomaton()
     if(glIsBuffer(ssbo_code))
         glDeleteBuffers(1, &ssbo_code);
 
-    size_t codeInfoSize = sizeof(float) * codes.size();
+    size_t codeInfoSize = sizeof(double) * codes.size();
 
     glGenBuffers(1, &ssbo_code);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_code);
