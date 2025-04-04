@@ -88,10 +88,13 @@ struct TransitionData {
             : mat(m), nextState(next) {}
 };
 
+#define WORKGROUP_SIZE 256
+#define OPTI true
+#define PRECISION float
 //Data GPU formated
 std::vector<StateData> states;
 std::vector<TransitionData> transitions;
-std::vector<double> codes;
+std::vector<PRECISION> codes;
 
 /*
  * Send a formated automate to the GPU
@@ -208,9 +211,21 @@ void initOpenGL() {
     uni_perspective = glGetUniformLocation(renderProgram, "PERSPECTIVE");
     uni_nbIter = glGetUniformLocation(renderProgram, "nbIteration");
 
+    std::string computePath = "../shaders/decode-ifs";
 
     //Loading compute shader
-    std::ifstream file("../shaders/decode-ifsLSM.comp", std::ios::in);
+#if PRECISION != float
+    computePath += "64";
+#endif
+
+#if OPTI == true
+    computePath += "LSM";
+#endif
+
+    computePath += ".comp";
+
+    std::ifstream file(computePath, std::ios::in);
+
     if (!file.is_open()) {
         std::cerr << "Erreur : Impossible d'ouvrir le fichier " << "shaders/decode-ifs.comp" << std::endl;
         exit(0);
@@ -503,7 +518,7 @@ void encodeAutomaton()
     //Add logic if uniform automaton, no need to encode CPU side
 
     auto start = std::chrono::high_resolution_clock::now();
-    codes = automate.encode2<double>(nbIteration);
+    codes = automate.encode2<PRECISION>(nbIteration);
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
     std::cout << "Encoding execution timme : " << duration.count() << " ms." << std::endl;
@@ -515,7 +530,7 @@ void encodeAutomaton()
     if(glIsBuffer(ssbo_code))
         glDeleteBuffers(1, &ssbo_code);
 
-    size_t codeInfoSize = sizeof(double) * codes.size();
+    size_t codeInfoSize = sizeof(PRECISION) * codes.size();
 
     glGenBuffers(1, &ssbo_code);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo_code);
@@ -552,9 +567,8 @@ void decodeAutomaton(){
     glUniform1ui(uni_compNbInstance, nbInstance);
 
     glBeginQuery(GL_TIME_ELAPSED, query);
-    glDispatchCompute((nbInstance + 63) / 64, 1, 1);
+    glDispatchCompute((nbInstance + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-    glFlush();
     glEndQuery(GL_TIME_ELAPSED);
     glUseProgram(0);
 
